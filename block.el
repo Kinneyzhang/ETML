@@ -247,67 +247,75 @@ to a symbol 'right, count the right side only."
                  (block-pixel-spacing right-padding)
                  right-border-string
                  right-margin-string)))
+         (top-margin (block-margin block :top))
+         (bottom-margin (block-margin block :bottom))
+         (top-padding (block-padding block :top))
+         (bottom-padding (block-padding block :bottom))
+         (bottom-border (block-border block :bottom))
+         (top-border (block-border block :top))
          (block-lines (split-string block-string "\n" t)))    
     
     ;; 设置上下 padding
-    (let ((top-padding (block-padding block :top))
-          (bottom-padding (block-padding block :bottom)))
-      (if (and (= content-linum 1)
-               (< top-padding 1) (< bottom-padding 1))
-          ;; 特殊情况：只有一行，且上下 0 < padding < 1
-          (unless (and (= top-padding 0) (= bottom-padding 0))
-            (setf (car block-lines)
-                  (block-propertize
-                   (concat (car block-lines) "\n")
-                   `(line-height ,(+ 1 top-padding bottom-padding)
-                                 display (raise ,bottom-padding)))))
-        ;; 一般情况，padding > 1，设置像素行；padding < 1，设置 line-height
-        ;; set top padding for start line
-        (cond
-         ((= top-padding 0) (ignore))
-         ((< top-padding 1)
+    (if (and (= content-linum 1)
+             (< top-padding 1) (< bottom-padding 1))
+        ;; 特殊情况：只有一行，且上下 0 < padding < 1
+        (unless (and (= top-padding 0) (= bottom-padding 0))
           (setf (car block-lines)
                 (block-propertize
-                 ;; first line already ends with \n here
                  (concat (car block-lines) "\n")
-                 `(line-height ,(1+ top-padding)))))
-         ((>= top-padding 1)
-          (setq block-lines
-                (append
-                 (make-list
-                  top-padding
-                  ;; padding 行需要加上左右边框及左右 margin
-                  (concat
-                   left-margin-string
-                   (when left-border (block-pixel-border 1 1 left-border))
-                   (block-pixel-spacing
-                    (+ content-pixel left-padding right-padding))
-                   (when right-border (block-pixel-border 1 1 right-border))
-                   right-margin-string))
-                 block-lines))))
-        ;; set bottom padding for end line
-        (cond
-         ((= bottom-padding 0) (ignore))
-         ((< bottom-padding 1)
-          (setf (car (last block-lines))
-                (block-propertize
-                 ;; last line always ends with \n
-                 (concat (car (last block-lines)) "\n")
-                 `(line-height (nil ,(1+ bottom-padding))))))
-         ((>= bottom-padding 1)
-          (setq block-lines
-                (append
-                 block-lines
-                 (make-list
-                  bottom-padding
-                  ;; padding 行需要加上左右边框及margin
-                  (concat
-                   left-margin-string
-                   (when left-border (block-pixel-border 1 1 left-border))
-                   (block-pixel-spacing
-                    (+ content-pixel left-padding right-padding))
-                   (when right-border (block-pixel-border 1 1 right-border))
-                   right-margin-string))))))))
+                 `(line-height ,(+ 1 top-padding bottom-padding)
+                               display (raise ,bottom-padding)))))
+      ;; 一般情况，padding > 1，设置像素行；padding < 1，设置 line-height
+      ;; set top padding for start line
+      (cond
+       ((= top-padding 0) (ignore))
+       ((< top-padding 1)
+        (setf (car block-lines)
+              (block-propertize
+               ;; first line already ends with \n here
+               (concat (car block-lines) "\n")
+               `(line-height ,(1+ top-padding)))))
+       ((>= top-padding 1)
+        (setq block-lines
+              (append
+               (make-list
+                top-padding
+                ;; padding 行需要加上左右边框及左右 margin
+                (concat
+                 left-margin-string
+                 (when left-border (block-pixel-border
+                                    1 1 left-border))
+                 (block-pixel-spacing
+                  (+ content-pixel left-padding right-padding))
+                 (when right-border (block-pixel-border
+                                     1 1 right-border))
+                 right-margin-string))
+               block-lines))))
+      ;; set bottom padding for end line
+      (cond
+       ((= bottom-padding 0) (ignore))
+       ((< bottom-padding 1)
+        (setf (car (last block-lines))
+              (block-propertize
+               ;; last line always ends with \n
+               (concat (car (last block-lines)) "\n")
+               `(line-height (nil ,(1+ bottom-padding))))))
+       ((>= bottom-padding 1)
+        (setq block-lines
+              (append
+               block-lines
+               (make-list
+                bottom-padding
+                ;; padding 行需要加上左右边框及margin
+                (concat
+                 left-margin-string
+                 (when left-border (block-pixel-border
+                                    1 1 left-border))
+                 (block-pixel-spacing
+                  (+ content-pixel left-padding right-padding))
+                 (when right-border (block-pixel-border
+                                     1 1 right-border))
+                 right-margin-string)))))))
 
     ;; 给每一行设置背景色, margin 部分不设置背景色
     (when-let ((bgcolor (block-bgcolor block))
@@ -325,67 +333,72 @@ to a symbol 'right, count the right side only."
                     block-lines)))
     
     ;; 给首行设置上边框，不能包含左右 margin
-    (when-let ((top-border (block-border block :top))
-               ;; 属性设置要去除开头结尾的 margin 位置
-               (left-inc (if (> left-margin 0) 1 0))
-               (right-dec (if (> right-margin 0) 1 0)))
-      (setf (car block-lines)
-            ;; make-list 创建的是同一个对象，需要 copy 新的 string
-            (let ((line (car block-lines)))
-              (if (string-match-p "\n$" line)
-                  ;; 最后的换行符不能加 overline 属性
+    (when top-border
+      ;; 属性设置要去除开头结尾的 margin 位置
+      (let ((left-inc (if (> left-margin 0) 1 0))
+            (right-dec (if (> right-margin 0) 1 0)))
+        (setf (car block-lines)
+              ;; make-list 创建的是同一个对象，需要 copy 新的 string
+              (let ((line (car block-lines)))
+                (if (string-match-p "\n$" line)
+                    ;; 最后的换行符不能加 overline 属性
+                    (block-propertize
+                     line `(face (:overline ,top-border))
+                     left-inc (- (length line) 1 right-dec))
                   (block-propertize
                    line `(face (:overline ,top-border))
-                   left-inc (- (length line) 1 right-dec))
-                (block-propertize
-                 line `(face (:overline ,top-border))
-                 left-inc (- (length line) right-dec))))))
+                   left-inc (- (length line) right-dec)))))))
     
     ;; 新增下边框行，要pad上左右 margin
-    (when-let ((bottom-border (block-border block :bottom)))
-      ;; FIXME: border width should by any pixel
-      (let* ((left-border-pixel 1)
-             (right-border-pixel 1)
-             (after-line
-              (concat left-margin-string
-                      (block-bottom-border-line
-                       (- total-pixel left-margin right-margin)
-                       bottom-border)
-                      right-margin-string)))
-        ;; after-line 用于设置 底部的 border
-        (setq block-lines (append block-lines (list after-line)))))
+    (when bottom-border
+      ;; 属性设置要去除开头结尾的 margin 位置
+      (let ((left-inc (if (> left-margin 0) 1 0))
+            (right-dec (if (> right-margin 0) 1 0)))
+        (setf (car (last block-lines))
+              ;; make-list 创建的是同一个对象，需要 copy 新的 string
+              (let ((line (car (last block-lines))))
+                (if (string-match-p "\n$" line)
+                    ;; 最后的换行符不能加 overline 属性
+                    (block-propertize
+                     line `(face (:underline ( :color ,bottom-border
+                                               :position t)))
+                     left-inc (- (length line) 1 right-dec))
+                  (block-propertize
+                   line `(face (:underline ( :color ,bottom-border
+                                             :position t)))
+                   left-inc (- (length line) right-dec)))))))
 
     ;; ;; set top and bottom margins, shoud be integer!
-    (let ((top-margin (block-margin block :top))
-          (bottom-margin (block-margin block :bottom)))
-      (setq block-lines
-            (append
-             (make-list
-              top-margin (block-pixel-spacing total-pixel))
-             block-lines
-             (make-list
-              bottom-margin (block-pixel-spacing total-pixel)))))
+    (setq block-lines
+          (append
+           (make-list
+            top-margin (block-pixel-spacing total-pixel))
+           block-lines
+           (make-list
+            bottom-margin (block-pixel-spacing total-pixel))))
     
-    ;; 必须要在最后连接所有行，因为中间直接字符串操作可能使 line-height 失效
+    ;; !!必须要在最后连接所有行，因为中间直接字符串操作可能使 line-height 失效
     (setq block-string
           (mapconcat (lambda (line)
                        (if (string-match-p "\n$" line)
                            line
                          (concat line "\n")))
                      block-lines))
-    ;; 去掉最后的换行符
+
     (string-trim-right block-string "\n")))
 
 ;;;###autoload
 (defun block-concat (&rest blocks)
   "TEXT-ALIGN should be one of left,center,right.
 ALIGN should be one of top,center,bottom."
-  (block :content (block-lines-concat (mapcar #'block-render blocks))))
+  (block :content (block-lines-concat
+                   (mapcar #'block-render blocks))))
 
 ;;;###autoload
 (defun block-stack (&rest blocks)
   "ALIGN used for all blocks, TEXT-ALIGN used for text in a block."
-  (block :content (block-lines-stack (mapcar #'block-render blocks))))
+  (block :content (block-lines-stack
+                   (mapcar #'block-render blocks))))
 
 ;;;###autoload
 (defun block-string (&rest kvs)

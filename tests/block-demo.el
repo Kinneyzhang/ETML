@@ -4,16 +4,15 @@
 
 (defvar block-demo-window-pixel nil)
 
-(setq block-demo-window-pixel (window-pixel-width))
-
 (defmacro block-pop-buffer (buffer-name &rest body)
   (declare (indent defun))
   `(let ((buffer (get-buffer-create ,buffer-name)))
+     (delete-other-windows)
+     (setq block-demo-window-pixel (window-pixel-width))
      (with-current-buffer buffer
        (local-set-key "q" 'quit-window)
        (erase-buffer)
        ,@body)
-     (delete-other-windows)
      (switch-to-buffer buffer)))
 
 (defvar block-demo-header-str
@@ -56,7 +55,7 @@
          :width `(,block-demo-window-pixel) :justify 'left
          :height (- (window-body-height) 8) :align 'top
          :border '("#7D9EC0" . "#40E0D0")
-         :padding `(:left 2 :right 2)
+         :padding `(:left 2 :right 2 :bottom 1)
          :margin '(:left 1 :top 1)))
 
 (defun block-demo-body-pixel ()
