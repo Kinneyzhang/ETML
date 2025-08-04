@@ -2,7 +2,7 @@
 
 ## Demo
 
-Eval functions in test/block-demo.el, then `M-x block-demo-show`:
+Eval functions in tests/etml-demo.el, then `M-x etml-demo-show`:
 
 In dark theme
 
