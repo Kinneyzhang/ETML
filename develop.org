@@ -1,0 +1,15 @@
+* 配色方案
+n https://www.ruanyifeng.com/blog/2019/03/coloring-scheme.html
+n flex 布局
+n1 https://www.ruanyifeng.com/blog/2015/07/flex-grammar.html
+n1 https://www.ruanyifeng.com/blog/2015/07/flex-examples.html
+n css 动画
+n1 https://www.ruanyifeng.com/blog/2014/02/css_transition_and_animation.html
+n css in js
+n1 https://www.ruanyifeng.com/blog/2017/04/css_in_js.html
+
+* 开发计划
+t block 支持字体,字体大小和颜色等设置
+t 将 sexp 解析为树结构
+t 优先实现 etml-flex.el
+t 后续再实现 etml-grid.el

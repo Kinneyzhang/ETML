@@ -39,24 +39,29 @@
   (floor (* 1.5 (string-pixel-width etml-demo-sidebar-str))))
 
 (defvar etml-demo-card-str1
-  (propertize "作为神之编辑器（Editor of the Gods），Emacs 早已超越了普通文本编辑器的范畴。它是由​​Richard Stallman​​于1976年创建的​​GNU项目​核心组件，其名字源自 Editor MACroS​​。在过去的半个世纪里，Emacs演化成了一个​​self-documenting, customizable, extensible​​的生态系统，用户可通过​​Emacs Lisp (elisp)​​ 重新定义编辑行为。M-x 是每个Emacer的魔法咒语——按下Alt（或Meta键）加x即可召唤任意命令，比如M-x butterfly这样的复活节彩蛋。中国开发者常戏称其为“​​永远的操作系统​​”，因为你可以通过org-mode管理TODO list、用magit操作Git仓库、甚至用EMMS播放MP3音乐。在Unix哲学中，Emacs坚持“一个编辑器统治所有​​”（One Editor to Rule Them All）的理念，这与VSCode等现代编辑器形成鲜明对比。" 'face '(:family "Cascadia Next SC")))
+  (propertize "作为神之编辑器（Editor of the Gods），Emacs 早已超越了普通文本编辑器的范畴。它是由​​Richard Stallman​​于1976年创建的​​GNU项目​核心组件，其名字源自 Editor MACroS​​。在过去的半个世纪里，Emacs演化成了一个​​self-documenting, customizable, extensible​​的生态系统，用户可通过​​Emacs Lisp (elisp)​​ 重新定义编辑行为。M-x 是每个Emacer的魔法咒语——按下Alt（或Meta键）加x即可召唤任意命令，比如M-x butterfly这样的复活节彩蛋。中国开发者常戏称其为“​​永远的操作系统​​”，因为你可以通过org-mode管理TODO list、用magit操作Git仓库、甚至用EMMS播放MP3音乐。在Unix哲学中，Emacs坚持“一个编辑器统治所有​​”（One Editor to Rule Them All）的理念，这与VSCode等现代编辑器形成鲜明对比。" 'face '(:family "Trebuchet MS")))
 
 (defvar etml-demo-card-str2
   (propertize
    "Developed initially by Richard Stallman in the 1970s as part of the GNU Project and continuously refined for over four decades, GNU Emascs transcends conventional text editor categorization. At its architectural core, it operates as a dynamically extensible Lisp virtual machine optimized for symbolic computation and text transformation, enabling unparalleled workflow customization across programming, technical writing, scientific research, and system administration."
-   'face '(:family "Cascadia Next SC")))
+   'face '(:family "Trebuchet MS")))
+
+;; "Cascadia Next SC"
+;; Verdana
+;; Trebuchet MS
 
 (defvar etml-demo-card-str3
   (propertize "Les paléocosmologistes contemporains affrontent un désarroi paradigmatique depuis la découverte fortuite des microfossiles astrobiologiques interstellaires dans les météorites carbonées d'Orgueil. Ces structures cryptocristallines microtubulaires, interprétées par certains comme des nanoorganismes exoplanétaires fossiles."
-              'face '(:family "Cascadia Next SC")))
+              'face '(:family "Comic Sans MS")))
 
 (defun etml-demo-body (content)
   (etml-block :content content
               :width `(,etml-demo-window-pixel) :justify 'left
               :height (- (window-body-height) 8) :align 'top
-              :border '("#7D9EC0" . "#40E0D0")
+              ;; :border '("#7D9EC0" . "#40E0D0")
+              :bgcolor "#444"
               :padding `(:left 2 :right 2 :bottom 1)
-              :margin '(:left 1 :top 1)))
+              :margin '(:left 6 :right 6 :top 2)))
 
 (defun etml-demo-body-pixel ()
   (etml-block-content-pixel (etml-demo-body "")))
@@ -141,7 +146,7 @@
 (defvar etml-demo-card-str5
   (propertize
    "Claude Code is an agentic coding tool that lives in your terminal, understands your codebase, and helps you code faster by executing routine tasks, explaining complex code, and handling git workflows -- all through natural language commands. Use it in your terminal, IDE, or tag @claude on Github."
-   'face '(:family "Times New Roman")))
+   'face '(:family "Cascadia Next SC")))
 
 (defun etml-demo-show ()
   (interactive)
