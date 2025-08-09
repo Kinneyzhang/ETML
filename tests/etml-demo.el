@@ -4,13 +4,19 @@
 
 (defvar etml-demo-window-pixel nil)
 
+(defun etml-demo-quit-window ()
+  (interactive)
+  (let ((map (current-local-map)))
+    (quit-window)
+    (unbind-key "q" map)))
+
 (defmacro etml-pop-buffer (buffer-name &rest body)
   (declare (indent defun))
   `(let ((buffer (get-buffer-create ,buffer-name)))
      (delete-other-windows)
      (setq etml-demo-window-pixel (window-pixel-width))
      (with-current-buffer buffer
-       (local-set-key "q" 'quit-window)
+       (local-set-key "q" 'etml-demo-quit-window)
        (erase-buffer)
        ,@body)
      (switch-to-buffer buffer)))
@@ -58,10 +64,11 @@
   (etml-block :content content
               :width `(,etml-demo-window-pixel) :justify 'left
               :height (- (window-body-height) 8) :align 'top
-              ;; :border '("#7D9EC0" . "#40E0D0")
-              :bgcolor "#444"
+              ;; :border t
+              ;; #F2F2F2 #FFF9F0 #FFF7E8 #FBF2ED #F0F7F2
+              :bgcolor '("#FFF9F0" . "#444")
               :padding `(:left 2 :right 2 :bottom 1)
-              :margin '(:left 6 :right 6 :top 2)))
+              :margin '(:left 2 :right 2 :top 1)))
 
 (defun etml-demo-body-pixel ()
   (etml-block-content-pixel (etml-demo-body "")))
@@ -120,7 +127,7 @@
 (defun etml-demo-cardx (str)
   (etml-block :content str
               :width `(,(etml-demo-cardx-pixel))
-              :padding '(:left 2 :right 2 :top 0 :bottom 0)
+              :padding '(:left 0 :right 2 :top 0 :bottom 0)
               :margin '(:left 2 :right 0 :top 1)
               :border '(:right t)))
 
@@ -179,8 +186,8 @@
                               :padding '(:left 1 :right 1))
                   (etml-block :content "   ")
                   (etml-block :content etml-demo-card-str5
-                              :width `(,(floor (* 0.4 (etml-demo-cardy-pixel))))
+                              :width `(,(floor (* 0.5 (etml-demo-cardy-pixel))))
                               :justify 'center
-                              :border t
+                              :border "grey"
                               :padding '(:left 1 :right 1))))))))))))))))
     (goto-char (point-min))))
