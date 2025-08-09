@@ -4,10 +4,10 @@
 
 Eval functions in tests/etml-demo.el, then `M-x etml-demo-show`:
 
-In dark theme
+In dark theme:
 
-![block-demo-dark](./images/block-demo-dark.png)
+![etml-demo-dark](./images/etml-demo-dark.png)
 
-In light theme
+In light theme:
 
-![light-demo-dark](./images/block-demo-light.png)
+![etml-demo-light](./images/etml-demo-light.png)
