@@ -32,10 +32,22 @@
               start end prop value string)))))
     string))
 
-(defun etml-width-pixel (width)
+(defun etml-width-pixel (width &optional content)
+  "Return the pixel of etml width. If WIDTH is a cons-cell,\
+ use the car of it as pixel. If WIDTH is a integer, use the\
+ pixel width number of chars in CONTENT as pixel. If the number\
+ of chars in CONTENT is less than WIDTH, use pixel of space to\
+ pad the rest width."
   (cond
    ((consp width) (car width))
-   ((numberp width) (* width (string-pixel-width " ")))
+   ((numberp width)
+    (if content
+        (or (etml-string-nchar-pixel content width)
+            (+ (string-pixel-width content)
+               ;; 内容小于 width 个字符时，用空格补齐剩余字符计算像素
+               (* (- width (length content))
+                  (string-pixel-width " "))))
+      (* width (string-pixel-width " "))))
    (t (error "Invalid format of width %S" width))))
 
 (defun etml-pixel-border (n-pixel height &optional color)
