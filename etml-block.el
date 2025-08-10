@@ -48,7 +48,7 @@ Border supports the following formats:
 5. a plist means: set the border in each direction separately and the value
    of border in each direction also supports all kinds of formats above.
    Such as '(:left t :right nil :top \"red\" :bottom (\"red\" . \"green\"))"
-  (let* ((border (oref block :border))
+  (let* ((border (oref block border))
          (default-color (etml-default-border-color))
          (plist
           (cond
@@ -79,7 +79,7 @@ Border supports the following formats:
 
 (defun etml-block-padding (block direction)
   "Return the padding of BLOCK in DIRECTION."
-  (let* ((padding (oref block :padding))
+  (let* ((padding (oref block padding))
          (plist
           (cond
            ((eq padding t)
@@ -107,7 +107,7 @@ Border supports the following formats:
 
 (defun etml-block-margin (block direction)
   "Return the margin of BLOCK in DIRECTION."
-  (let* ((margin (oref block :margin))
+  (let* ((margin (oref block margin))
          (plist
           (cond
            ((or (eq margin t) (null margin))
@@ -160,11 +160,11 @@ to a symbol 'right, count the right side only."
 
 (defun etml-block-total-pixel (block)
   "Return the total pixel width of BLOCK."
-  (if-let ((width (oref block :width)))
+  (if-let ((width (oref block width)))
       (cond
        ((consp width) (car width))
        ((numberp width)
-        (let ((content (oref block :content)))
+        (let ((content (oref block content)))
           (+ (etml-block-side-pixel block)
              (or (etml-string-nchar-pixel content width)
                  ;; 内容小于 width 个字符时，用空格补齐剩余字符计算像素
@@ -173,26 +173,26 @@ to a symbol 'right, count the right side only."
                        (string-pixel-width " ")))))))
        (t (error "Invalid format of block width: %S" width)))
     ;; when :width is nil, total-pixel = content pixel + side pixel
-    (+ (string-pixel-width (oref block :content))
+    (+ (string-pixel-width (oref block content))
        (etml-block-side-pixel block))))
 
 (defun etml-block-content-pixel (block)
   "Return the pixel width of BLOCK's content."
-  (if (oref block :width)
+  (if (oref block width)
       (- (etml-block-total-pixel block)
          (etml-block-side-pixel block))
     ;; when :width is nil, use the real content pixel
-    (string-pixel-width (oref block :content))))
+    (string-pixel-width (oref block content))))
 
 (defun etml-block-content (block)
   "Return the block content after justified and set width."
-  (etml-lines-justify (oref block :content)
+  (etml-lines-justify (oref block content)
                       (etml-block-content-pixel block)
-                      (oref block :justify)))
+                      (oref block justify)))
 
 (defun etml-block-bgcolor (block)
   "Return the background color of BLOCK."
-  (let ((color (oref block :bgcolor)))
+  (let ((color (oref block bgcolor)))
     (cond ((null color) nil)
           ((stringp color) color)
           ((etml-atom-consp color)
@@ -213,10 +213,10 @@ to a symbol 'right, count the right side only."
          (content-pixel (etml-block-content-pixel block))
          (content (etml-block-content block))
          ;; 如果有 height，处理行数
-         (height (oref block :height))
+         (height (oref block height))
          (content (if height
                       (etml-lines-align
-                       content height (oref block :align))
+                       content height (oref block align))
                     content))
          (content-linum (etml-string-linum content))
          ;; 确定高度之后再设置水平方向的 margin, padding, border
@@ -509,7 +509,7 @@ ALIGN should be one of top,center,bottom."
 ;;       (when (> start-line linum) (throw 'return ""))
 ;;       (when (< start-line 1) (setq start-line 1))
 ;;       (when (> end-line linum) (setq end-line linum))
-;;       (let* ((string (oref block :content))
+;;       (let* ((string (oref block content))
 ;;              ;; bottom-border 需要单独获取的原因是它不属于最后一行本身的属性
 ;;              (bottom-border (etml-block-border block :bottom))
 ;;              (cut-lines (seq-subseq (split-string block-string "\n")
