@@ -34,6 +34,7 @@
                                      (= 1 (length el))
                                      (integerp (car el)))))))))
     (cond
+     ((symbolp value) (or (eq 'none value) (eq 'auto value)))
      ((listp value) (funcall check-lst value))
      ((vectorp value) (seq-every-p check-lst value)))))
 
@@ -76,10 +77,11 @@
    (items-order :initarg :items-order :initform nil
                 :type (or null (vector integer))
                 :documentation "nil means use the default order.")
-   (items-flex :initarg :items-flex :initform '(0 1 auto)
+   (items-flex :initarg :items-flex :initform 'none
                :type (satisfies etml-flex-items-flex-p)
                :documentation "合并 flex-grow, flex-shrink,\
- flex-basis。flex: [grow] [shrink] [basis]")
+ flex-basis。flex: [grow] [shrink] [basis]. 'auto means (1 1 auto),
+ 'none means (0 0 auto).")
    ;; (item-grow :initarg :item-grow :initform 0
    ;;              :type (satisfies etml-flex-number-vector-p)
    ;;              :documentation "定义项目在​​容器有剩余空间时​​的​​放大比例​​。\
