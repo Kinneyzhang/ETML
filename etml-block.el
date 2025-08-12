@@ -3,39 +3,104 @@
 ;; block 的 width 为 (num) 时，表示整个 block 的像素宽度
 ;; block 的 width 为 num 时，表示内容部分的字符的个数
 
-(require 'eieio)
 (require 'etml-utils)
 
+(seq-subseq '(1 2 3 4 5 6 7 8) 1 8)
+
 (defclass etml-block ()
-  ((content :initarg :content :type string)
-   (width :initarg :width :initform nil)
+  ((content :initarg :content :initform "" :type string)
+   (width :initarg :width :initform nil
+          :documentation "block width or content char number")
    (min-width :initarg :min-width :initform nil)
+   (max-width :initarg :max-width :initform nil)
    (justify :initarg :justify :initform 'left)
-   (height :initarg :height :initform nil)
+   (height :initarg :height :initform nil
+           :documentation "content height")
+   (min-height :initarg :min-height :initform 1)
+   (max-height :initarg :max-height :initform nil)
    (align :initarg :align :initform 'top)
    (bgcolor :initarg :bgcolor :initform nil)
    (border :initarg :border :initform nil)
    (margin :initarg :margin :initform nil)
-   (padding :initarg :padding :initform nil)))
+   (padding :initarg :padding :initform nil)
+   (nowrap :initarg :nowrap :initform nil :type symbol
+           :documentation "表示水平方向是否不换行，默认换行")
+   (overflow
+    :initarg :overflow :initform 'scroll
+    :documentation "溢出时如何显示，会被解析为:(x-overflow . y-overflow)。
+1. 当 nowrap=t 且内容长度超过 width 时，根据 overflow-x 处理溢出部分；
+2. 当 height > 文本高度时，根据 overflow-y 处理溢出的行。
+支持以下的值: visible(内容溢出到容器外), hidden(截断溢出部分),\
+ scroll(默认：内容溢出时支持滚动)。")
+   ;; (scroll-bar-size :initarg :scroll-size
+   ;;                  :documentation "垂直滚动条的高度大小")
+   (scroll-offset :initarg :offset :initform '(0 . 0)
+                  :documentation "当有溢出时的水平和垂直方向的偏移量")))
 
-(defun etml-block-parse-color (color default-color)
-  "Parse all kinds of COLOR to the real color.
+;; (defun etml-block-parse-color (color default-color)
+;;   "Parse all kinds of COLOR to the real color.
 
-1. If COLOR is t, return the DEFAULT-COLOR.
-2. If COLOR is nil, return nil.
-3. If COLOR is a string, return the string as color.
-4. If COLOR is a cons-cell, return the car of cons-cell
-   in light theme and the cdr of cons-cell in dark theme."
-  (cond ((eq t color) default-color)
-        ((null color) nil)
-        ((stringp color) color)
-        ((etml-atom-consp color)
+;; 1. If COLOR is t, return the DEFAULT-COLOR.
+;; 2. If COLOR is nil, return nil.
+;; 3. If COLOR is a string, return the string as color.
+;; 4. If COLOR is a cons-cell, return the car of cons-cell
+;;    in light theme and the cdr of cons-cell in dark theme."
+;;   (if (plistp color)
+;;       ;; do not parse '(:style double-line :color "grey")
+;;       color
+;;     (cond ((eq t color) default-color)
+;;           ((null color) nil)
+;;           ((stringp color) color)
+;;           ((etml-atom-consp color)
+;;            (pcase (etml-background-type)
+;;              ('light (car color))
+;;              ('dark (cdr color))))
+;;           (t (error "Invalid format of border color %S" color)))))
+
+;; (defun etml-block-parse-color (color default-color)
+;;   "Parse all kinds of COLOR to the real color.
+
+;; 1. If COLOR is t, return the DEFAULT-COLOR.
+;; 2. If COLOR is nil, return nil.
+;; 3. If COLOR is a string, return the string as color.
+;; 4. If COLOR is a cons-cell, return the car of cons-cell
+;;    in light theme and the cdr of cons-cell in dark theme."
+;;   (cond ((eq t color) default-color)
+;;         ((null color) nil)
+;;         ((stringp color) color)
+;;         ((etml-atom-consp color)
+;;          (pcase (etml-background-type)
+;;            ('light (car color))
+;;            ('dark (cdr color))))
+;;         (t (error "Invalid format of border color %S" color))))
+
+(defun etml-block-parse-border (border)
+  "Parse the BORDER data in a single direction and return a plist\
+ like '(:type scroll :color \"#xxx\" :width 1). If type is nil, it's\
+ a normal line border; if type is 'scroll, it's a scroll bar.
+
+Width here is not the real width of border, it border type is 'scroll,\
+it should add the extra 2 pixel width of scroll bar.
+
+1. If BORDER is t, color is DEFAULT-BORDER, width is 1.
+2. If BORDER is nil, return nil.
+3. If BORDER is a string, color is the string, width is 1.
+4. If BORDER is a cons-cell, color is the car of cons-cell
+   when in light theme and the cdr of cons-cell when in dark theme.
+ width is 1.
+5. If BORDER is a plist, directly return it."
+  (cond ((eq t border)
+         (list :color (etml-default-border-color) :width 1))
+        ((null border) (list :width 0))
+        ((stringp border) (list :color color :width 1))
+        ((plistp border) border)
+        ((etml-atom-consp border)
          (pcase (etml-background-type)
-           ('light (car color))
-           ('dark (cdr color))))
-        (t (error "Invalid format of border color %S" color))))
+           ('light (list :color (car border) :width 1))
+           ('dark (list :color (cdr border) :width 1))))
+        (t (error "Invalid format of border %S" border))))
 
-(defun etml-block-border (block direction)
+(defun etml-block-single-border (block direction)
   "Parse the multiple format of border property in BLOCK
 and return the border color in a given DIRECTION.
 
@@ -51,33 +116,48 @@ Border supports the following formats:
    of border in each direction also supports all kinds of formats above.
    Such as '(:left t :right nil :top \"red\" :bottom (\"red\" . \"green\"))"
   (let* ((border (oref block border))
+         ;; border data in all directions.
          (default-color (etml-default-border-color))
          (plist
           (cond
            ((eq border t)
-            (list :left default-color :right default-color
-                  :top default-color :bottom default-color))
+            ;; use default color, width is pixel,
+            ;; width only supports in left and right border
+            (list :left (list :color default-color :width 1)
+                  :right (list :color default-color :width 1)
+                  :top (list :color default-color)
+                  :bottom (list :color default-color)))
            ((null border)
-            (list :left nil :right nil :top nil :bottom nil))
+            ;; no border
+            (list :left (list :width 0) :right (list :width 0)
+                  :top (list :width 0) :bottom (list :width 0)))
            ((stringp border)
-            (list :left border :right border
-                  :top border :bottom border))
+            ;; border is color
+            (list :left (list :color border :width 1)
+                  :right (list :color border :width 1)
+                  :top (list :color border)
+                  :bottom (list :color border)))
            ((plistp border) border)
            ((etml-atom-consp border)
+            ;; '(light-color . dark-color)
             (let ((light-theme-color (car border))
                   (dark-theme-color (cdr border)))
               (pcase (etml-background-type)
-                ('light (list :left light-theme-color
-                              :right light-theme-color
-                              :top light-theme-color
-                              :bottom light-theme-color))
-                ('dark (list :left dark-theme-color
-                             :right dark-theme-color
-                             :top dark-theme-color
-                             :bottom dark-theme-color)))))
+                ('light
+                 (list :left (list :color light-theme-color :width 1)
+                       :right (list :color light-theme-color :width 1)
+                       :top (list :color light-theme-color)
+                       :bottom (list :color light-theme-color)))
+                ('dark
+                 (list :left (list :color dark-theme-color :width 1)
+                       :right (list :color dark-theme-color :width 1)
+                       :top (list :color dark-theme-color)
+                       :bottom (list :color  dark-theme-color))))))
            (t (error "Invalid format of border: %S" border))))
-         (color (plist-get plist direction)))
-    (etml-block-parse-color color default-color)))
+         ;; border data in a single DIRECTION.
+         (border (plist-get plist direction)))
+    ;; 返回一个 cons-cell: (color . scroll)
+    (etml-block-parse-border border)))
 
 (defun etml-block-padding (block direction)
   "Return the padding of BLOCK in DIRECTION."
@@ -98,6 +178,9 @@ Border supports the following formats:
             (unless (plist-get padding :bottom)
               (plist-put padding :bottom 0))
             padding)
+           ((etml-atom-consp padding)
+            (list :left (car padding) :right (car padding)
+                  :top (cdr padding) :bottom (cdr padding)))
            (t (error "Invalid format of padding: %S" padding))))
          (width (plist-get plist direction)))
     (if (or (eq direction :left)
@@ -124,6 +207,9 @@ Border supports the following formats:
             (unless (plist-get margin :bottom)
               (plist-put margin :bottom 0))
             margin)
+           ((etml-atom-consp margin)
+            (list :left (car margin) :right (car margin)
+                  :top (cdr margin) :bottom (cdr margin)))
            (t (error "Invalid format of margin: %S" margin))))
          (width (plist-get plist direction)))
     (if (or (eq direction :left)
@@ -139,41 +225,36 @@ total of margin, padding and border pixel.
 Defautly count both the left and right side. If SIDE equals
 to a symbol 'left, count the left side only; if SIDE equals
 to a symbol 'right, count the right side only."
-  (let* ((left-border (etml-block-border block :left))
-         (right-border (etml-block-border block :right))
+  (let* ((left-border (etml-block-single-border block :left))
+         (right-border (etml-block-single-border block :right))
          (left-margin-pixel (etml-block-margin block :left))
          (right-margin-pixel (etml-block-margin block :right))
          (left-padding-pixel (etml-block-padding block :left))
          (right-padding-pixel (etml-block-padding block :right))
          (left-side-pixel (+ left-margin-pixel left-padding-pixel))
-         (right-side-pixel (+ right-margin-pixel right-padding-pixel))
-         ;; FIXME: border width should by any pixel
-         (left-border-pixel 1)
-         (right-border-pixel 1))
-    (when left-border
-      (setq left-side-pixel (+ left-side-pixel left-border-pixel)))
-    (when right-border
-      (setq right-side-pixel (+ right-side-pixel right-border-pixel)))
+         (right-side-pixel (+ right-margin-pixel
+                              right-padding-pixel)))
+    ;; when border is a scroll bar, add extra width
+    (setq left-side-pixel
+          (+ left-side-pixel
+             ;; when type is non-nil,
+             ;; add extra 2 pixel of scroll bar
+             (if (plist-get left-border :type) 2 0)
+             (plist-get left-border :width)))
+    (setq right-side-pixel
+          (+ right-side-pixel
+             ;; when type is non-nil,
+             ;; add extra 2 pixel of scroll bar
+             (if (plist-get right-border :type) 2 0)
+             (plist-get right-border :width)))
     (pcase side
       ((pred null) (+ left-side-pixel right-side-pixel))
       ('left left-side-pixel)
       ('right right-side-pixel)
       (_ (error "Invalid format of side %S" side)))))
 
-(defun etml-block-total-min-pixel (block)
-  "Return the total min pixel width of BLOCK."
-  (when-let ((width (oref block min-width)))
-    (cond
-     ((consp width) (car width))
-     ((numberp width)
-      (let ((content (oref block content)))
-        (+ (etml-block-side-pixel block)
-           (etml-width-pixel width content))))
-     (t (error "Invalid format of block width: %S" width)))))
-
-(defun etml-block-total-curr-pixel (block)
-  "Return the total current pixel width of BLOCK."
-  (if-let ((width (oref block width)))
+(defun etml-block-get-pixel (block slot)
+  (if-let ((width (eval `(oref ,block ,slot))))
       (cond
        ((consp width) (car width))
        ((numberp width)
@@ -182,15 +263,28 @@ to a symbol 'right, count the right side only."
              (etml-width-pixel width content))))
        (t (error "Invalid format of block width: %S" width)))
     ;; when :width is nil, total-pixel = content pixel + side pixel
-    (+ (string-pixel-width (oref block content))
-       (etml-block-side-pixel block))))
+    (if (eq slot 'min-width)
+        20 ;; 不设置 min-width 时的默认最小宽度
+      (+ (string-pixel-width (oref block content))
+         (etml-block-side-pixel block)))))
+
+(defun etml-block-total-min-pixel (block)
+  "Return the total min pixel width of BLOCK."
+  (etml-block-get-pixel block 'min-width))
+
+(defun etml-block-total-max-pixel (block)
+  "Return the total max pixel width of BLOCK."
+  (etml-block-get-pixel block 'max-width))
+
+(defun etml-block-total-curr-pixel (block)
+  "Return the total current pixel width of BLOCK."
+  (etml-block-get-pixel block 'width))
 
 (defun etml-block-total-pixel (block)
   "Return the total pixel width of BLOCK."
-  (let ((pixel (etml-block-total-curr-pixel block)))
-    (if-let ((min-pixel (etml-block-total-min-pixel block)))
-        (max pixel min-pixel)
-      pixel)))
+  (max (etml-block-total-min-pixel block)
+       (min (etml-block-total-curr-pixel block)
+            (etml-block-total-max-pixel block))))
 
 (defun etml-block-content-pixel (block)
   "Return the pixel width of BLOCK's content."
@@ -223,19 +317,98 @@ to a symbol 'right, count the right side only."
                        `(face (:overline ,border)))
     (etml-pixel-spacing width)))
 
+;; (mwheel-scroll EVENT &optional ARG)
+;; FIXME: consider min-width and max-width!
 (defun etml-block-render (block)
   "返回卡片当前面渲染后的文本"
   (let* ((total-pixel (etml-block-total-pixel block))
-         (content-pixel (etml-block-content-pixel block))
          (content (etml-block-content block))
-         ;; 如果有 height，处理行数
+         (content-lines
+          (if (string-empty-p content)
+              (list "")
+            (split-string content "\n" t)))
+         (content-height (etml-string-linum content))
+         ;; process overflow, scroll-bar-size and scroll-offset
+         ;; 判断是否溢出
          (height (oref block height))
-         (content (if height
-                      (etml-lines-align
-                       content height (oref block align))
-                    content))
-         (content-linum (etml-string-linum content))
-         ;; 确定高度之后再设置水平方向的 margin, padding, border
+         (min-height (or (oref block min-height) height))
+         (max-height (or (oref block max-height) height))
+         (shown-content-height
+          (if height
+              (min max-height (max height min-height))
+            (let ((min-height (or min-height content-height))
+                  (max-height (or max-height content-height)))
+              (min max-height (max content-height min-height)))))
+         ;; shown-content-height content-height
+         ;; content-lines
+         ;; (width (oref block width))
+         ;; (min-width (oref block min-width))
+         ;; (max-width (oref block max-width))
+         
+         ;; 计算了 width, min-width, max-width 之后的最终内容宽度
+         (content-pixel (etml-block-content-pixel block))
+         (final-width content-pixel)
+         ;; 原始文本的宽度
+         (original-content-width (string-pixel-width content))
+         ;; 判断水平方是否溢出
+         (x-overflow-p (and (> original-content-width final-width)
+                            (oref block nowrap)))
+         ;; 判断垂直方是否溢出
+         (y-overflow-p (> content-height shown-content-height))
+         ;; 解析 水平 和 垂直方向的溢出策略
+         (overflow (let ((overflow (oref block overflow)))
+                     (if (symbolp overflow)
+                         (cons overflow overflow)
+                       overflow)))
+         (x-overflow (car overflow))
+         (y-overflow (cdr overflow))
+         ;; 溢出时，根据 overflow 策略处理: scroll / hidden / visible
+         ;; 计算设置 scroll-bar-size, scroll-offset 和 content
+         ;; (_ (when x-overflow-p ())) ;; FIXME
+         (scroll-offset (oref block scroll-offset))
+         (x-scroll-offset (car scroll-offset))
+         ;; (y-scroll-bar-size nil)
+         (y-scroll-offset (cdr scroll-offset))
+         (y-scroll-bar-size 1)
+         ;; 实际展示的多行内容
+         (shown-content-lines content-lines)
+         (_ (message "shown-content-lines:%S" shown-content-lines))
+         (shown-content-rest-lines nil) ;; used in visible
+         (_ (when y-overflow-p
+              ;; 设置 shown-content-lines 和 y-scroll-bar-size
+              (pcase y-overflow
+                ('scroll
+                 (let* ((y-overflow-num ;; 溢出的行数
+                         (- content-height shown-content-height))
+                        (start y-scroll-offset)
+                        ;; 偏移量 <= 溢出的行数
+                        (end (if (<= start y-overflow-num)
+                                 (+ start shown-content-height)
+                               content-height)))
+                   (setq y-scroll-bar-size
+                         (- shown-content-height y-overflow-num))
+                   (setq shown-content-lines
+                         (seq-subseq content-lines start end))))
+                ('hidden
+                 (setq shown-content-lines
+                       (seq-subseq content-lines 0 shown-content-height)))
+                ;; FIXME: how to display?
+                ;; ('visible
+                ;;  (setq shown-content-lines
+                ;;        (seq-subseq content-lines 0 shown-content-height))
+                ;;  (setq shown-content-rest-lines
+                ;;        (seq-subseq content-lines shown-content-height
+                ;;                    content-height)))
+                )))
+         
+         ;; height 不包含 padding and margin
+         ;; text includes content and empty lines
+         (text (etml-lines-align
+                (string-join shown-content-lines "\n")
+                shown-content-height
+                (oref block align)))
+         (text-linum (etml-string-linum text))
+         ;; 确定文本高度之后再设置水平方向的 margin, padding, border
          ;; add padding and border in left and right
          (left-margin (etml-block-margin block :left))
          (right-margin (etml-block-margin block :right))
@@ -243,23 +416,32 @@ to a symbol 'right, count the right side only."
          (right-margin-string (etml-pixel-spacing right-margin))
          (left-padding (etml-block-padding block :left))
          (right-padding (etml-block-padding block :right))
-         (left-border (etml-block-border block :left))
-         (right-border (etml-block-border block :right))
-         (left-border-string
-          ;; FIXME: border always equals to 1 ???
-          (if left-border
-              (etml-pixel-border 1 content-linum left-border)
-            ""))
-         (right-border-string
-          (if right-border
-              (etml-pixel-border 1 content-linum right-border)
-            ""))
+         ;; process left and border
+         (left-border (etml-block-single-border block :left))
+         (left-border-width (plist-get left-border :width))
+         (left-border-color (plist-get left-border :color))
+         (left-border-type (plist-get left-border :type))
+         (right-border (etml-block-single-border block :right))
+         (right-border-width (plist-get right-border :width))
+         (right-border-color (plist-get right-border :color))
+         (right-border-type (plist-get right-border :type))
+         (left-border-string (etml-block-border
+                              left-border-width text-linum
+                              left-border-color left-border-type
+                              y-scroll-bar-size
+                              y-scroll-offset))
+         (right-border-string (etml-block-border
+                               right-border-width text-linum
+                               right-border-color right-border-type
+                               y-scroll-bar-size
+                               y-scroll-offset))
+         ;; (_ (message "text:%S" text))
          (block-string
           (etml-lines-concat
            (list left-margin-string
                  left-border-string
                  (etml-pixel-spacing left-padding)
-                 content
+                 text
                  (etml-pixel-spacing right-padding)
                  right-border-string
                  right-margin-string)))
@@ -267,12 +449,14 @@ to a symbol 'right, count the right side only."
          (bottom-margin (etml-block-margin block :bottom))
          (top-padding (etml-block-padding block :top))
          (bottom-padding (etml-block-padding block :bottom))
-         (bottom-border (etml-block-border block :bottom))
-         (top-border (etml-block-border block :top))
-         (block-lines (split-string block-string "\n" t)))    
+         (bottom-border (etml-block-single-border block :bottom))
+         (top-border (etml-block-single-border block :top))
+         (block-lines (split-string block-string "\n" t)))
+
+    ;; (message "block-lines:%S" block-lines)
     
     ;; 设置上下 padding
-    (if (and (= content-linum 1)
+    (if (and (= text-linum 1)
              (< top-padding 1) (< bottom-padding 1))
         ;; 特殊情况：只有一行，且上下 0 < padding < 1
         (unless (and (= top-padding 0) (= bottom-padding 0))
@@ -299,12 +483,16 @@ to a symbol 'right, count the right side only."
                 ;; padding 行需要加上左右边框及左右 margin
                 (concat
                  left-margin-string
-                 (when left-border (etml-pixel-border
-                                    1 1 left-border))
+                 (when left-border
+                   (etml-block-border
+                    left-border-width 1 left-border-color
+                    left-border-type))
                  (etml-pixel-spacing
                   (+ content-pixel left-padding right-padding))
-                 (when right-border (etml-pixel-border
-                                     1 1 right-border))
+                 (when right-border
+                   (etml-block-border
+                    right-border-width 1 right-border-color
+                    right-border-type))
                  right-margin-string))
                block-lines))))
       ;; set bottom padding for end line
@@ -325,12 +513,16 @@ to a symbol 'right, count the right side only."
                 ;; padding 行需要加上左右边框及margin
                 (concat
                  left-margin-string
-                 (when left-border (etml-pixel-border
-                                    1 1 left-border))
+                 (when left-border
+                   (etml-block-border
+                    left-border-width 1 left-border-color
+                    left-border-type))
                  (etml-pixel-spacing
                   (+ content-pixel left-padding right-padding))
-                 (when right-border (etml-pixel-border
-                                     1 1 right-border))
+                 (when right-border
+                   (etml-block-border
+                    right-border-width 1 right-border-color
+                    right-border-type))
                  right-margin-string)))))))
 
     ;; 给每一行设置背景色, margin 部分不设置背景色
@@ -372,16 +564,26 @@ to a symbol 'right, count the right side only."
             (right-dec (if (> right-margin 0) 1 0)))
         (setf (car (last block-lines))
               ;; make-list 创建的是同一个对象，需要 copy 新的 string
-              (let ((line (car (last block-lines))))
+              (let ((line (car (last block-lines)))
+                    color style)
+                ;; bottom border supports:
+                ;;  '(:style double-line :color "grey")
+                ;; when line overflow, set style to 'double-line
+                (if (plistp bottom-border)
+                    (progn
+                      (setq color (plist-get bottom-border :color))
+                      (setq style (plist-get bottom-border :style)))
+                  (setq color bottom-border))
+                (message "style:%S" style)
                 (if (string-match-p "\n$" line)
                     ;; 最后的换行符不能加 overline 属性
                     (etml-propertize
-                     line `(face (:underline ( :color ,bottom-border
-                                               :position t)))
+                     line `(face (:underline (:color ,color :style ,style
+                                                     :position t)))
                      left-inc (- (length line) 1 right-dec))
                   (etml-propertize
-                   line `(face (:underline ( :color ,bottom-border
-                                             :position t)))
+                   line `(face (:underline (:color ,color :style ,style
+                                                   :position t)))
                    left-inc (- (length line) right-dec)))))))
 
     ;; ;; set top and bottom margins, shoud be integer!
@@ -527,7 +729,7 @@ ALIGN should be one of top,center,bottom."
 ;;       (when (> end-line linum) (setq end-line linum))
 ;;       (let* ((string (oref block content))
 ;;              ;; bottom-border 需要单独获取的原因是它不属于最后一行本身的属性
-;;              (bottom-border (etml-block-border block :bottom))
+;;              (bottom-border (etml-block-single-border block :bottom))
 ;;              (cut-lines (seq-subseq (split-string block-string "\n")
 ;;                                     (1- start-line) end-line))
 ;;              (content (string-trim (car cut-lines)))

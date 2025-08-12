@@ -9,7 +9,8 @@
   "只有两个元素的 cons 类型判断"
   (and (consp obj)
        (cdr obj)
-       (atom (cdr obj))))
+       (atom (cdr obj))
+       (atom (car obj))))
 
 (defun etml-propertize (string properties
                                &optional start end)
@@ -33,10 +34,10 @@
     string))
 
 (defun etml-width-pixel (width &optional content)
-  "Return the pixel of etml width. If WIDTH is a cons-cell,\
- use the car of it as pixel. If WIDTH is a integer, use the\
- pixel width number of chars in CONTENT as pixel. If the number\
- of chars in CONTENT is less than WIDTH, use pixel of space to\
+  "Return the pixel of etml width. If WIDTH is a cons-cell,
+ use the car of it as pixel. If WIDTH is a integer, use the
+ pixel width number of chars in CONTENT as pixel. If the number
+ of chars in CONTENT is less than WIDTH, use pixel of space to
  pad the rest width."
   (cond
    ((consp width) (car width))
@@ -50,6 +51,9 @@
       (* width (string-pixel-width " "))))
    (t (error "Invalid format of width %S" width))))
 
+(defun etml-default-border-color ()
+  (frame-parameter nil 'foreground-color))
+
 (defun etml-pixel-border (n-pixel height &optional color)
   (if (or (= 0 n-pixel) (= 0 height))
       ""
@@ -62,6 +66,32 @@
                     'display `(space :width (,n-pixel)))))
       (etml-string-duplines string height))))
 
+(defun etml-block-border
+    (n-pixel height &optional color type
+             scroll-bar-size scroll-offset)
+  "Return the left or right border of block. The border has
+ N-PIXEL width and HEIGHT lines tall and color is COLOR.
+
+If TYPE is nil, it's a normal line border;
+If type is 'scroll, it's a scroll bar. Use SCROLL-BAR-SIZE and
+ SCROLL-OFFSET to format the scroll bar."
+  (let ((border-string (etml-pixel-border n-pixel height color))
+        (scroll-string ""))
+    (when (eq type 'scroll)
+      (setq scroll-string
+            (concat
+             (when (> scroll-offset 0)
+               (concat (etml-block-blank 2 scroll-offset) "\n"))
+             (if scroll-bar-size
+                 (etml-pixel-border 2 scroll-bar-size color)
+               ;; case: pad scroll border in padding line,
+               ;; height is 1
+               (etml-block-blank 2))
+             "\n"
+             (etml-block-blank 2 (- height scroll-bar-size
+                                    scroll-offset)))))
+    (etml-lines-concat (list scroll-string border-string))))
+
 (defun etml-string-nchar-pixel (string n &optional from-end)
   "Return the pixel width of n char in STRING from start
 by default. If FROM-END is non-nil, count from the end."
@@ -70,9 +100,6 @@ by default. If FROM-END is non-nil, count from the end."
       (if from-end
           (string-pixel-width (substring string (- strlen n)))
         (string-pixel-width (substring string 0 n))))))
-
-(defun etml-default-border-color ()
-  (frame-parameter nil 'foreground-color))
 
 (defun etml-block-blank (pixel &optional height)
   (if (= pixel 0)
