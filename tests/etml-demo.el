@@ -1,25 +1,9 @@
 ;; -*- lexical-binding: t -*-
 
 (require 'etml-block)
+(require 'etml-test)
 
 (defvar etml-demo-window-pixel nil)
-
-(defun etml-demo-quit-window ()
-  (interactive)
-  (let ((map (current-local-map)))
-    (quit-window)
-    (unbind-key "q" map)))
-
-(defmacro etml-pop-buffer (buffer-name &rest body)
-  (declare (indent defun))
-  `(let ((buffer (get-buffer-create ,buffer-name)))
-     (delete-other-windows)
-     (setq etml-demo-window-pixel (window-pixel-width))
-     (with-current-buffer buffer
-       (local-set-key "q" 'etml-demo-quit-window)
-       (erase-buffer)
-       ,@body)
-     (switch-to-buffer buffer)))
 
 (defvar etml-demo-header-str
   (propertize "Emacs China MISC Demo" 'face '(:height 1.8)))
@@ -63,7 +47,7 @@
 (defun etml-demo-body (content)
   (etml-block :content content
               :width `(,etml-demo-window-pixel) :justify 'left
-              :height (- (window-body-height) 8) :align 'top
+              ;; :height (- (window-body-height) 2) :align 'top
               ;; :border t
               ;; #F2F2F2 #FFF9F0 #FFF7E8 #FBF2ED #F0F7F2
               :bgcolor '("#FFF9F0" . "#444")
@@ -157,7 +141,7 @@
 
 (defun etml-demo-show ()
   (interactive)
-  (etml-pop-buffer "*etml-demo*"
+  (etml-test-pop-buffer "*etml-demo*"
     (insert
      (etml-block-render
       (etml-demo-body
