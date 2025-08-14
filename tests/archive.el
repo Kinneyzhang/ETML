@@ -1,3 +1,78 @@
+(defun etml-block-parse-total-pixel (block slot)
+  (when-let ((width (eval `(oref ,block ,slot))))
+    (cond
+     ((consp width) (car width))
+     ((numberp width)
+      (let ((content (oref block content)))
+        (+ (etml-block-side-pixel block)
+           (etml-width-pixel width content))))
+     (t (error "Invalid format of block width: %S" width)))))
+
+(defun etml-block-side-pixel (block &optional side)
+  "Return the side pixel width of BLOCK. Side pixel is the
+total of margin, padding and border pixel.
+
+Defautly count both the left and right side. If SIDE equals
+to a symbol 'left, count the left side only; if SIDE equals
+to a symbol 'right, count the right side only."
+  (let* ((y-scroll-p (etml-block-y-scroll-p block))
+         ;; FIXME: recursive dependency
+         ;; etml-block-y-scroll-p => content-height
+         ;; content-height => content-width
+         ;; content-width = total width - side-width
+         ;; this is side-width
+         (left-border (etml-block-single-border block :left))
+         (right-border (etml-block-single-border block :right))
+         (left-margin-pixel (etml-block-margin block :left))
+         (right-margin-pixel (etml-block-margin block :right))
+         (left-padding-pixel (etml-block-padding block :left))
+         (right-padding-pixel (etml-block-padding block :right))
+         (left-side-pixel (+ left-margin-pixel left-padding-pixel))
+         (right-side-pixel (+ right-margin-pixel
+                              right-padding-pixel)))
+    ;; when border is a scroll bar, add extra width
+    (setq left-side-pixel
+          (+ left-side-pixel
+             ;; when type is non-nil,
+             ;; add extra pixel of scroll bar
+             (if-let* ((pixel (plist-get left-border :width))
+                       ((> pixel 0)))
+                 ;; has left border
+                 (if (and y-scroll-p
+                          (eq 'left etml-block-scroll-bar-direction))
+                     (if etml-block-scroll-bar-border-full-p
+                         (+ 1 pixel etml-block-scroll-bar-pixel)
+                       (+ pixel etml-block-scroll-bar-pixel))
+                   pixel)
+               ;; no left border
+               (if (and y-scroll-p
+                        (eq 'left etml-block-scroll-bar-direction))
+                   etml-block-scroll-bar-pixel
+                 0))))
+    (setq right-side-pixel
+          (+ right-side-pixel
+             ;; when type is non-nil,
+             ;; add extra pixel of scroll bar
+             (if-let* ((pixel (plist-get right-border :width))
+                       ((> pixel 0)))
+                 ;; has right border
+                 (if (and y-scroll-p
+                          (eq 'right etml-block-scroll-bar-direction))
+                     (if etml-block-scroll-bar-border-full-p
+                         (+ 1 pixel etml-block-scroll-bar-pixel)
+                       (+ pixel etml-block-scroll-bar-pixel))
+                   pixel)
+               ;; no right border
+               (if (and y-scroll-p
+                        (eq 'right etml-block-scroll-bar-direction))
+                   etml-block-scroll-bar-pixel
+                 0))))
+    (pcase side
+      ((pred null) (+ left-side-pixel right-side-pixel))
+      ('left left-side-pixel)
+      ('right right-side-pixel)
+      (_ (error "Invalid format of side %S" side)))))
+
 (defun etml-block-concat (strings &optional align text-align)
   "TEXT-ALIGN should be one of left,center,right.
 ALIGN should be one of top,center,bottom."
