@@ -5,31 +5,37 @@
 
 (require 'etml-utils)
 
-(defvar etml-block-scroll-bar-pixel 2
-  "Pixel width of scroll bar in vertical.")
+;; (defvar etml-block-scroll-bar-pixel 2
+;;   "Pixel width of scroll bar in vertical.")
 
-(defvar etml-block-scroll-bar-color '("#111" . "#fff")
-  "Color of scroll bar in vertical. It's a cons-cell,
-the car of it is color in light theme; the cdr of it is
-color in dark theme.")
+;; (defvar etml-block-scroll-bar-color '("#111" . "#fff")
+;;   "Color of scroll bar in vertical. It's a cons-cell,
+;; the car of it is color in light theme; the cdr of it is
+;; color in dark theme.")
 
-(defvar etml-block-scroll-bar-direction 'right
-  "The direction of scroll bar, could be set as 'left or 'right.")
+;; (defvar etml-block-scroll-bar-direction 'right
+;;   "The direction of scroll bar, could be set as 'left or 'right.")
 
-(defvar etml-block-scroll-bar-full-p nil
-  "在有border的时候生效，确定是否用两边border包裹的 scroll bar.")
+;; (defvar etml-block-scroll-bar-full-p nil
+;;   "在有border的时候生效，确定是否用两边border包裹的 scroll bar.")
 
-(defvar etml-block-scroll-bar-gap-pixel 1
-  "The gap pixel between scroll bar and border when has border.
-If etml-block-scroll-bar-full-p is non-nil, set gaps at both.")
+;; (defvar etml-block-scroll-bar-gap-pixel 1
+;;   "The gap pixel between scroll bar and border when has border.
+;; If etml-block-scroll-bar-full-p is non-nil, set gaps at both.")
 
-(defun etml-block-scroll-bar-color ()
-  (pcase (etml-background-type)
-    ('light (car etml-block-scroll-bar-color))
-    ('dark (cdr etml-block-scroll-bar-color))))
+(defvar-local etml-block-caches
+    (make-hash-table
+     :test 'equal :size 100 :rehash-size 1.5 :weakness nil))
+
+(defun etml-block-scroll-bar-color (block)
+  (let ((cons (oref block scroll-bar-color)))
+    (pcase (etml-background-type)
+      ('light (car cons))
+      ('dark (cdr cons)))))
 
 (defclass etml-block ()
-  ((content :initarg :content :initform "" :type string)
+  ((uuid :initarg :uuid :initform (org-id-uuid) :type string)
+   (content :initarg :content :initform "" :type string)
    (width :initarg :width :initform nil
           :documentation "content pixel width or char number.
 If it's a pixel, it should be a cons-cell (<n-pixel>); if it's
@@ -61,7 +67,7 @@ the same with width.")
 2. 当 height > 文本高度时，根据 overflow-y 处理溢出的行。
 支持以下的值: visible(内容溢出到容器外), hidden(截断溢出部分),\
  scroll(默认：内容溢出时支持滚动)。")
-   ;; (scroll-bar-size :initarg :scroll-size
+   ;; (scroll-bar-height :initarg :scroll-size
    ;;                  :documentation "垂直滚动条的高度大小")
    (scroll-offset-x
     :initarg :scroll-offset-x :initform 0
@@ -73,7 +79,7 @@ the same with width.")
                      :initform 2)
    (scroll-bar-color :initarg :scroll-bar-color
                      :initform '("#111" . "#fff"))
-   (scroll=bar-direction :initarg :scroll=bar-direction
+   (scroll-bar-direction :initarg :scroll=bar-direction
                          :initform 'right)
    (scroll-bar-gap
     :initarg :scroll-bar-gap
@@ -399,14 +405,14 @@ to a symbol 'right, count the right side only."
 
 ;; FIXME: 参数改为 block....
 (defun etml-block-border
-    (n-pixel height &optional border-color
-             scroll-color type direction
-             scroll-offset scroll-bar-size scroll-bar-steps)
+    (block n-pixel height &optional border-color
+           type scroll-offset
+           scroll-bar-height scroll-bar-steps)
   "Return the left or right border of block. The border has
  N-PIXEL width and HEIGHT lines tall and color is COLOR.
 
 If TYPE is nil, it's a normal line border;
-If type is 'scroll, it's a scroll bar. Use SCROLL-BAR-SIZE,
+If type is 'scroll, it's a scroll bar. Use SCROLL-BAR-HEIGHT,
  SCROLL-OFFSET and SCROLL-BAR-STEPS to format the scroll bar."
   ;; SCROLL-BAR-STEPS 是一个列表：
   ;; 它决定了每隔几个 offset scroll-bar 移动一个高度
@@ -414,80 +420,81 @@ If type is 'scroll, it's a scroll bar. Use SCROLL-BAR-SIZE,
   (let ((border-string (etml-pixel-border
                         n-pixel height border-color))
         (scroll-string ""))
-    (when (eq type 'scroll)
-      (if scroll-bar-size
-          ;; scroll-offset 是滚动时的偏移量
-          ;; shown-offset 是 scroll-bar 上面展示的 offset 的高度
-          ;; 根据 scroll-offset 和 scroll-bar-step 计算 shown-offset
-          (let* ((prefixs
-                  ;; 计算前缀和
-                  (let ((prefix 0))
-                    (mapcar (lambda (n)
-                              (setq prefix (+ prefix n)))
-                            scroll-bar-steps)))
-                 (shown-offset (etml--num-in-prefixs
-                                scroll-offset prefixs)))
-            (setq scroll-string
-                  (concat
-                   ;; blank before scroll bar
-                   (when (> shown-offset 0)
-                     (concat (etml-block-blank
-                              scroll-bar-pixel
-                              shown-offset)
-                             "\n"))
-                   ;; scroll bar
-                   (etml-pixel-border
-                    scroll-bar-pixel
-                    scroll-bar-size scroll-color)
-                   ;; blank after scroll bar
-                   (when-let* ((rest-height
-                                (- height (or scroll-bar-size 0)
-                                   shown-offset))
-                               ((> rest-height 0)))
-                     (concat "\n" (etml-block-blank
-                                   scroll-bar-pixel
-                                   rest-height))))))
-        ;; case: pad scroll border in padding line and height is 1
-        (setq scroll-string (etml-block-blank
-                             scroll-bar-pixel))))
-    (if (string-empty-p scroll-string)
-        ;; no scroll bar
-        border-string
-      ;; has scroll bar
-      (if scroll-bar-full
-          (etml-lines-concat
-           (list border-string
-                 (etml-pixel-spacing
-                  scroll-bar-gap)
-                 scroll-string
-                 (etml-pixel-spacing
-                  scroll-bar-gap)
-                 border-string))
-        (etml-lines-concat
-         (cond
-          ((eq direction 'left)
-           (list border-string
-                 (etml-pixel-spacing
-                  scroll-bar-gap)
-                 scroll-string))
-          ((eq direction 'right)
-           (list scroll-string
-                 (etml-pixel-spacing
-                  scroll-bar-gap)
-                 border-string))))))))
+    ;; need to set scroll bar
+    (if (eq type 'scroll)
+        (let ((scroll-bar-pixel (oref block scroll-bar-pixel))
+              (scroll-bar-color (etml-block-scroll-bar-color block))
+              (scroll-bar-full (oref block scroll-bar-full))
+              (scroll-bar-direction (oref block scroll-bar-direction))
+              (scroll-bar-gap (oref block scroll-bar-gap)))
+          (if scroll-bar-height
+              ;; 内容部分的滚动条
+              ;; scroll-offset 是滚动时的偏移量
+              ;; shown-offset 是 scroll-bar 上面展示的 offset 的高度
+              ;; 根据 scroll-offset 和 scroll-bar-step 计算 shown-offset
+              (let* ((prefixs
+                      ;; 计算前缀和
+                      (let ((prefix 0))
+                        (mapcar (lambda (n)
+                                  (setq prefix (+ prefix n)))
+                                scroll-bar-steps)))
+                     (shown-offset (etml--num-in-prefixs
+                                    scroll-offset prefixs)))
+                (setq scroll-string
+                      (concat
+                       ;; blank before scroll bar
+                       (when (> shown-offset 0)
+                         (concat (etml-block-blank
+                                  scroll-bar-pixel
+                                  shown-offset)
+                                 "\n"))
+                       ;; scroll bar
+                       (etml-pixel-border
+                        scroll-bar-pixel
+                        scroll-bar-height scroll-bar-color)
+                       ;; blank after scroll bar
+                       (when-let* ((rest-height
+                                    (- height (or scroll-bar-height 0)
+                                       shown-offset))
+                                   ((> rest-height 0)))
+                         (concat "\n" (etml-block-blank
+                                       scroll-bar-pixel
+                                       rest-height))))))
+            ;; padding部分滚动条填充
+            ;; case: pad scroll border in padding line and height is 1
+            (setq scroll-string (etml-block-blank
+                                 scroll-bar-pixel)))
+          (if scroll-bar-full
+              (etml-lines-concat
+               (list border-string
+                     (etml-pixel-spacing scroll-bar-gap)
+                     scroll-string
+                     (etml-pixel-spacing scroll-bar-gap)
+                     border-string))
+            (etml-lines-concat
+             (cond ((eq scroll-bar-direction 'left)
+                    (list border-string
+                          (etml-pixel-spacing scroll-bar-gap)
+                          scroll-string))
+                   ((eq scroll-bar-direction 'right)
+                    (list scroll-string
+                          (etml-pixel-spacing scroll-bar-gap)
+                          border-string))))))
+      border-string)))
 
 ;; (mwheel-scroll EVENT &optional ARG)
 ;; FIXME: consider min-width and max-width!
 (defun etml-block-render (block)
   "返回卡片当前面渲染后的文本"
-  (let* ((total-pixel (etml-block-total-pixel block))
+  (let* ((uuid (oref block uuid))
+         (total-pixel (etml-block-total-pixel block))
          (content (etml-block-content block))
          (content-lines
           (if (string-empty-p content)
               (list "")
             (split-string content "\n" t)))
          (content-height (etml-string-linum content))
-         ;; process overflow, scroll-bar-size and scroll-offset
+         ;; process overflow, scroll-bar-height and scroll-offset
          ;; 判断是否溢出
          (height (oref block height))
          (min-height (or (oref block min-height) height))
@@ -498,12 +505,6 @@ If type is 'scroll, it's a scroll bar. Use SCROLL-BAR-SIZE,
             (let ((min-height (or min-height content-height))
                   (max-height (or max-height content-height)))
               (min max-height (max content-height min-height)))))
-         ;; shown-content-height content-height
-         ;; content-lines
-         ;; (width (oref block width))
-         ;; (min-width (oref block min-width))
-         ;; (max-width (oref block max-width))
-         
          ;; 计算了 width, min-width, max-width 之后的最终内容宽度
          (content-pixel (etml-block-content-pixel block))
          (final-width content-pixel)
@@ -520,11 +521,11 @@ If type is 'scroll, it's a scroll bar. Use SCROLL-BAR-SIZE,
          (x-overflow (car overflow))
          (y-overflow (cdr overflow))
          ;; 溢出时，根据 overflow 策略处理: scroll / hidden / visible
-         ;; 计算设置 scroll-bar-size, scroll-offset 和 content
+         ;; 计算设置 scroll-bar-height, scroll-offset 和 content
          (x-scroll-offset (oref block scroll-offset-x))
          ;; FIXME: 处理水平方向溢出
          (y-scroll-offset (oref block scroll-offset-y))
-         (y-scroll-bar-size 1) ;; 滚动条的高度
+         (y-scroll-bar-height 1) ;; 滚动条的高度
          (y-scroll-bar-steps nil) ;; 滚动几次对应一个显示的offset
          ;; 实际展示的多行内容
          (shown-content-lines content-lines)
@@ -532,7 +533,7 @@ If type is 'scroll, it's a scroll bar. Use SCROLL-BAR-SIZE,
          (left-border-type nil)
          (right-border-type nil)
          (_ (when y-overflow-p
-              ;; 设置 shown-content-lines 和 y-scroll-bar-size
+              ;; 设置 shown-content-lines 和 y-scroll-bar-height
               (pcase y-overflow
                 ('scroll
                  ;; 垂直方向溢出，需要设置 type=scroll
@@ -545,11 +546,13 @@ If type is 'scroll, it's a scroll bar. Use SCROLL-BAR-SIZE,
                         ;; 偏移量 <= 溢出的行数
                         (end (if (<= start y-overflow-num)
                                  (+ start shown-content-height)
-                               content-height)))
+                               content-height))
+                        (scroll-bar-direction
+                         (oref block scroll-bar-direction)))
                    ;; 修正超出范围的 offset
                    (setq y-scroll-offset final-y-scroll-offset)
                    ;; FIXME: if shown-content-height < y-overflow-num
-                   ;; y-scroll-bar-size is negative
+                   ;; y-scroll-bar-height is negative
                    (cond
                     ((eq scroll-bar-direction 'right)
                      (setq right-border-type 'scroll))
@@ -560,7 +563,7 @@ If type is 'scroll, it's a scroll bar. Use SCROLL-BAR-SIZE,
                        (progn
                          ;; 内容展示高度 > 溢出高度时，计算滚动条高度
                          ;; 确保:一次滚动对应滚动条的一次移动
-                         (setq y-scroll-bar-size
+                         (setq y-scroll-bar-height
                                (- shown-content-height
                                   y-overflow-num))
                          (setq y-scroll-bar-steps
@@ -569,7 +572,7 @@ If type is 'scroll, it's a scroll bar. Use SCROLL-BAR-SIZE,
                                 (1- shown-content-height) 1)))
                      ;; 溢出高度 > 内容展示高度时，滚动条高度始终为1
                      ;; 需要确定几次滚动对应滚动条的一次移动
-                     (setq y-scroll-bar-size 1)
+                     (setq y-scroll-bar-height 1)
                      (setq y-scroll-bar-steps
                            (let ((each (/ y-overflow-num
                                           (1- shown-content-height)))
@@ -584,8 +587,17 @@ If type is 'scroll, it's a scroll bar. Use SCROLL-BAR-SIZE,
                               (make-list
                                ;; 可以滚动的高度 = 展示内容高度 - 1
                                (1- shown-content-height) each)))))
+                   (puthash uuid shown-content-lines
+                            etml-block-caches)
                    (setq shown-content-lines
-                         (seq-subseq content-lines start end))))
+                         (mapcar
+                          (lambda (line)
+                            (propertize
+                             line 'etml-block-line uuid
+                             'etml-block-y-offset y-scroll-offset))
+                          shown-content-lines))
+                   (setq shown-content-lines
+                         (seq-subseq shown-content-lines start end))))
                 ('hidden
                  (setq shown-content-lines
                        (seq-subseq content-lines
@@ -625,20 +637,20 @@ If type is 'scroll, it's a scroll bar. Use SCROLL-BAR-SIZE,
          (right-border-width (plist-get right-border :width))
          (right-border-color (plist-get right-border :color))
          (left-border-string (etml-block-border
+                              block
                               left-border-width text-linum
                               left-border-color
                               left-border-type
-                              'left
                               y-scroll-offset
-                              y-scroll-bar-size
+                              y-scroll-bar-height
                               y-scroll-bar-steps))
          (right-border-string (etml-block-border
+                               block
                                right-border-width text-linum
                                right-border-color
                                right-border-type
-                               'right
                                y-scroll-offset
-                               y-scroll-bar-size
+                               y-scroll-bar-height
                                y-scroll-bar-steps))
          (block-string
           (etml-lines-concat
@@ -687,14 +699,14 @@ If type is 'scroll, it's a scroll bar. Use SCROLL-BAR-SIZE,
                  left-margin-string
                  (when left-border
                    (etml-block-border
-                    left-border-width 1 left-border-color
-                    left-border-type 'left 0))
+                    block left-border-width 1 left-border-color
+                    left-border-type 0))
                  (etml-pixel-spacing
                   (+ content-pixel left-padding right-padding))
                  (when right-border
                    (etml-block-border
-                    right-border-width 1 right-border-color
-                    right-border-type 'right 0))
+                    block right-border-width 1 right-border-color
+                    right-border-type 0))
                  right-margin-string))
                block-lines))))
       ;; set bottom padding for end line
@@ -717,14 +729,14 @@ If type is 'scroll, it's a scroll bar. Use SCROLL-BAR-SIZE,
                  left-margin-string
                  (when left-border
                    (etml-block-border
-                    left-border-width 1 left-border-color
-                    left-border-type 'left 0))
+                    block left-border-width 1 left-border-color
+                    left-border-type 0))
                  (etml-pixel-spacing
                   (+ content-pixel left-padding right-padding))
                  (when right-border
                    (etml-block-border
-                    right-border-width 1 right-border-color
-                    right-border-type 'right 0))
+                    block right-border-width 1 right-border-color
+                    right-border-type 0))
                  right-margin-string)))))))
 
     ;; 给每一行设置背景色, margin 部分不设置背景色
