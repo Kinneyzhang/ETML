@@ -1,4 +1,5 @@
 (require 'etml-test)
+(require 'etml-block)
 
 (defvar etml-test-scroll-block
   (etml-block
