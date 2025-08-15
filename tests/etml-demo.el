@@ -46,7 +46,7 @@
 
 (defun etml-demo-body (content)
   (etml-block :content content
-              :width `(,etml-demo-window-pixel) :justify 'left
+              :width `(,(- etml-demo-window-pixel 100)) :justify 'left
               ;; :height (- (window-body-height) 2) :align 'top
               ;; :border t
               ;; #F2F2F2 #FFF9F0 #FFF7E8 #FBF2ED #F0F7F2
@@ -58,23 +58,34 @@
   (etml-block-content-pixel (etml-demo-body "")))
 
 (defun etml-demo-header ()
-  (etml-block :content
-              (etml-block-string
-               :content etml-demo-header-str
-               :width `(,(etml-demo-body-pixel)) :justify 'center
-               :margin '(:top 1))
-              :width `(,(etml-demo-body-pixel))
-              :justify 'center))
+  (let ((block (etml-block
+                :content etml-demo-header-str
+                :width `(,(- (etml-demo-body-pixel) 500)) :justify 'center
+                :margin '(:top 0))))
+    (etml-block-total-pixel block)
+    (string-pixel-width (etml-block-render block))
+    ;; (etml-block :content (etml-block-render block)
+    ;;             :width `(,(+ 2 (etml-block-total-pixel block)))
+    ;;             :justify 'center)
+    (etml-block-render block)
+    ))
+
+;; FIXME: 为什么左右会有1像素的空白
+;; (etml-test-pop-buffer "*etml-demo*"
+;;   (insert
+;;    (etml-demo-header)
+;;    ;; (etml-block-render (etml-demo-header))
+;;    ))
 
 (defun etml-demo-tabs ()
   (etml-block :content etml-demo-tabs-str
-              :width `(,(floor (* 0.7 (etml-demo-body-pixel))))
+              :width `(,(floor (* 0.4 (etml-demo-body-pixel))))
               :border '(:bottom ("#7D9EC0" . "#40E0D0"))
               :margin '(:bottom 1 :top 1)))
 
 (defun etml-demo-login ()
   (etml-block :content "注册 登陆"
-              :width `(,(floor (* 0.3 (etml-demo-body-pixel))))
+              :width `(,(floor (* 0.2 (etml-demo-body-pixel))))
               :justify 'right
               :margin '(:bottom 1 :top 1)
               :padding '(:right 5)
@@ -148,30 +159,31 @@
        (etml-block-render
         (etml-block-stack
          (etml-demo-header)
-         (etml-block-concat (etml-demo-tabs) (etml-demo-login))
-         (etml-block-concat
-          (etml-demo-sidebar)
-          (etml-demo-main
-           (etml-block-render
-            (etml-block-stack
-             (etml-demo-banner)
-             (etml-block-concat
-              (etml-demo-cardx etml-demo-card-str1)
-              (etml-block-stack
-               (etml-demo-cardy etml-demo-card-str2)
-               (etml-demo-cardy etml-demo-card-str3)
-               (etml-demo-rest
-                (etml-block-render
-                 (etml-block-concat
-                  (etml-block :content etml-demo-card-str4
-                              :width `(,(floor (* 0.4 (etml-demo-cardy-pixel))))
-                              :justify 'center
-                              :border "grey"
-                              :padding '(:left 1 :right 1))
-                  (etml-block :content "   ")
-                  (etml-block :content etml-demo-card-str5
-                              :width `(,(floor (* 0.5 (etml-demo-cardy-pixel))))
-                              :justify 'center
-                              :border "grey"
-                              :padding '(:left 1 :right 1))))))))))))))))
+         ;; (etml-block-concat (etml-demo-tabs) (etml-demo-login))
+         ;; (etml-block-concat
+         ;;  (etml-demo-sidebar)
+         ;;  (etml-demo-main
+         ;;   (etml-block-render
+         ;;    (etml-block-stack
+         ;;     (etml-demo-banner)
+         ;;     (etml-block-concat
+         ;;      (etml-demo-cardx etml-demo-card-str1)
+         ;;      (etml-block-stack
+         ;;       (etml-demo-cardy etml-demo-card-str2)
+         ;;       (etml-demo-cardy etml-demo-card-str3)
+         ;;       (etml-demo-rest
+         ;;        (etml-block-render
+         ;;         (etml-block-concat
+         ;;          (etml-block :content etml-demo-card-str4
+         ;;                      :width `(,(floor (* 0.4 (etml-demo-cardy-pixel))))
+         ;;                      :justify 'center
+         ;;                      :border "grey"
+         ;;                      :padding '(:left 1 :right 1))
+         ;;          (etml-block :content "   ")
+         ;;          (etml-block :content etml-demo-card-str5
+         ;;                      :width `(,(floor (* 0.5 (etml-demo-cardy-pixel))))
+         ;;                      :justify 'center
+         ;;                      :border "grey"
+         ;;                      :padding '(:left 1 :right 1)))))))))))
+         )))))
     (goto-char (point-min))))

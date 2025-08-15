@@ -79,49 +79,6 @@ If NUM is greater than all elements, return (1+ (length LST))."
           (setq pos (1+ pos)))
         pos))))
 
-(defun etml-block-border
-    (n-pixel height &optional color type
-             scroll-offset scroll-bar-size scroll-bar-steps)
-  "Return the left or right border of block. The border has
- N-PIXEL width and HEIGHT lines tall and color is COLOR.
-
-If TYPE is nil, it's a normal line border;
-If type is 'scroll, it's a scroll bar. Use SCROLL-BAR-SIZE,
- SCROLL-OFFSET and SCROLL-BAR-STEPS to format the scroll bar."
-  ;; SCROLL-BAR-STEPS 是一个列表：
-  ;; 它决定了每隔几个 offset scroll-bar 移动一个高度
-  ;; 也就是 scroll-bar 上面显示的 offset 的高度
-  (let ((border-string (etml-pixel-border n-pixel height color))
-        (scroll-string "")
-        ;; 计算前缀和
-        (prefixs (let ((prefix 0))
-                   (mapcar (lambda (n)
-                             (setq prefix (+ prefix n)))
-                           scroll-bar-steps))))
-    (when (eq type 'scroll)
-      (if scroll-bar-size
-          ;; scroll-offset 是滚动时的偏移量
-          ;; shown-offset 是 scroll-bar 上面展示的 offset 的高度
-          ;; 根据 scroll-offset 和 scroll-bar-step 计算 shown-offset
-          (let ((shown-offset (etml--num-in-prefixs
-                               scroll-offset prefixs)))
-            (setq scroll-string
-                  (concat
-                   (when (> shown-offset 0)
-                     (concat (etml-block-blank 1 shown-offset)
-                             "\n"))
-                   (etml-pixel-border 1 scroll-bar-size color)
-                   (when-let* ((rest-height
-                                (- height (or scroll-bar-size 0)
-                                   shown-offset))
-                               ((> rest-height 0)))
-                     (concat "\n" (etml-block-blank
-                                   1 rest-height))))))
-        ;; case: pad scroll border in padding line and height is 1
-        (setq scroll-string (etml-block-blank 1))))
-    (etml-lines-concat
-     (list border-string scroll-string border-string))))
-
 (defun etml-string-nchar-pixel (string n &optional from-end)
   "Return the pixel width of n char in STRING from start
 by default. If FROM-END is non-nil, count from the end."
