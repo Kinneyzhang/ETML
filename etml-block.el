@@ -68,7 +68,25 @@ the same with width.")
     :documentation "当有溢出时的水平方向的偏移量")
    (scroll-offset-y
     :initarg :scroll-offset-y :initform 0
-    :documentation "当有溢出时的垂直方向的偏移量")))
+    :documentation "当有溢出时的垂直方向的偏移量")
+   (scroll-bar-pixel :initarg :scroll-bar-pixel
+                     :initform 2)
+   (scroll-bar-color :initarg :scroll-bar-color
+                     :initform '("#111" . "#fff"))
+   (scroll=bar-direction :initarg :scroll=bar-direction
+                         :initform 'right)
+   (scroll-bar-gap
+    :initarg :scroll-bar-gap
+    :initform 1
+    :documentation
+    "The gap pixel between scroll bar and border \
+when has border. If scroll-bar-full is non-nil,\
+set gaps at both.")
+   (scroll-bar-full
+    :initarg :scroll-bar-full
+    :initform nil
+    :documentation
+    "在有border的时候生效，确定是否用两边border包裹的 scroll bar.")))
 
 (defun etml-block-parse-border (border)
   "Parse the BORDER data in a single direction and return a plist\
@@ -247,6 +265,10 @@ Defautly count both the left and right side. If SIDE equals
 to a symbol 'left, count the left side only; if SIDE equals
 to a symbol 'right, count the right side only."
   (let* ((y-scroll-p (etml-block-y-scroll-p block))
+         (scroll-bar-pixel (oref block scroll-bar-pixel))
+         (scroll-bar-gap (oref block scroll-bar-gap))
+         (scroll-bar-direction (oref block scroll-bar-direction))
+         (scroll-bar-full (oref block scroll-bar-full))
          (left-border (etml-block-single-border block :left))
          (right-border (etml-block-single-border block :right))
          (left-margin-pixel (etml-block-margin block :left))
@@ -266,17 +288,17 @@ to a symbol 'right, count the right side only."
                  ;; has left border
                  (if (and
                       y-scroll-p
-                      (eq 'left etml-block-scroll-bar-direction))
-                     (if etml-block-scroll-bar-full-p
-                         (+ 1 pixel etml-block-scroll-bar-pixel
-                            (* 2 etml-block-scroll-bar-gap-pixel))
-                       (+ pixel etml-block-scroll-bar-pixel
-                          etml-block-scroll-bar-gap-pixel))
+                      (eq 'left scroll-bar-direction))
+                     (if scroll-bar-full
+                         (+ 1 pixel scroll-bar-pixel
+                            (* 2 scroll-bar-gap))
+                       (+ pixel scroll-bar-pixel
+                          scroll-bar-gap))
                    pixel)
                ;; no left border
                (if (and y-scroll-p
-                        (eq 'left etml-block-scroll-bar-direction))
-                   etml-block-scroll-bar-pixel
+                        (eq 'left scroll-bar-direction))
+                   scroll-bar-pixel
                  0))))
     (setq right-side-pixel
           (+ right-side-pixel
@@ -287,17 +309,17 @@ to a symbol 'right, count the right side only."
                  ;; has right border
                  (if (and
                       y-scroll-p
-                      (eq 'right etml-block-scroll-bar-direction))
-                     (if etml-block-scroll-bar-full-p
-                         (+ 1 pixel etml-block-scroll-bar-pixel
-                            (* 2 etml-block-scroll-bar-gap-pixel))
-                       (+ pixel etml-block-scroll-bar-pixel
-                          etml-block-scroll-bar-gap-pixel))
+                      (eq 'right scroll-bar-direction))
+                     (if scroll-bar-full
+                         (+ 1 pixel scroll-bar-pixel
+                            (* 2 scroll-bar-gap))
+                       (+ pixel scroll-bar-pixel
+                          scroll-bar-gap))
                    pixel)
                ;; no right border
                (if (and y-scroll-p
-                        (eq 'right etml-block-scroll-bar-direction))
-                   etml-block-scroll-bar-pixel
+                        (eq 'right scroll-bar-direction))
+                   scroll-bar-pixel
                  0))))
     (pcase side
       ((pred null) (+ left-side-pixel right-side-pixel))
@@ -375,8 +397,10 @@ to a symbol 'right, count the right side only."
   "文本设置了宽度之后的原始高度。"
   (etml-string-linum (etml-block-content block)))
 
+;; FIXME: 参数改为 block....
 (defun etml-block-border
-    (n-pixel height &optional color type direction
+    (n-pixel height &optional border-color
+             scroll-color type direction
              scroll-offset scroll-bar-size scroll-bar-steps)
   "Return the left or right border of block. The border has
  N-PIXEL width and HEIGHT lines tall and color is COLOR.
@@ -387,66 +411,70 @@ If type is 'scroll, it's a scroll bar. Use SCROLL-BAR-SIZE,
   ;; SCROLL-BAR-STEPS 是一个列表：
   ;; 它决定了每隔几个 offset scroll-bar 移动一个高度
   ;; 也就是 scroll-bar 上面显示的 offset 的高度
-  (let ((border-string (etml-pixel-border n-pixel height color))
-        (scroll-string "")
-        ;; 计算前缀和
-        (prefixs (let ((prefix 0))
-                   (mapcar (lambda (n)
-                             (setq prefix (+ prefix n)))
-                           scroll-bar-steps))))
+  (let ((border-string (etml-pixel-border
+                        n-pixel height border-color))
+        (scroll-string ""))
     (when (eq type 'scroll)
       (if scroll-bar-size
           ;; scroll-offset 是滚动时的偏移量
           ;; shown-offset 是 scroll-bar 上面展示的 offset 的高度
           ;; 根据 scroll-offset 和 scroll-bar-step 计算 shown-offset
-          (let ((shown-offset (etml--num-in-prefixs
-                               scroll-offset prefixs)))
+          (let* ((prefixs
+                  ;; 计算前缀和
+                  (let ((prefix 0))
+                    (mapcar (lambda (n)
+                              (setq prefix (+ prefix n)))
+                            scroll-bar-steps)))
+                 (shown-offset (etml--num-in-prefixs
+                                scroll-offset prefixs)))
             (setq scroll-string
                   (concat
                    ;; blank before scroll bar
                    (when (> shown-offset 0)
                      (concat (etml-block-blank
-                              etml-block-scroll-bar-pixel
+                              scroll-bar-pixel
                               shown-offset)
                              "\n"))
                    ;; scroll bar
                    (etml-pixel-border
-                    etml-block-scroll-bar-pixel
-                    scroll-bar-size
-                    (etml-block-scroll-bar-color))
+                    scroll-bar-pixel
+                    scroll-bar-size scroll-color)
                    ;; blank after scroll bar
                    (when-let* ((rest-height
                                 (- height (or scroll-bar-size 0)
                                    shown-offset))
                                ((> rest-height 0)))
                      (concat "\n" (etml-block-blank
-                                   etml-block-scroll-bar-pixel
+                                   scroll-bar-pixel
                                    rest-height))))))
         ;; case: pad scroll border in padding line and height is 1
         (setq scroll-string (etml-block-blank
-                             etml-block-scroll-bar-pixel))))
-    (if (and etml-block-scroll-bar-full-p
-             (not (string-empty-p scroll-string)))
+                             scroll-bar-pixel))))
+    (if (string-empty-p scroll-string)
+        ;; no scroll bar
+        border-string
+      ;; has scroll bar
+      (if scroll-bar-full
+          (etml-lines-concat
+           (list border-string
+                 (etml-pixel-spacing
+                  scroll-bar-gap)
+                 scroll-string
+                 (etml-pixel-spacing
+                  scroll-bar-gap)
+                 border-string))
         (etml-lines-concat
-         (list border-string
-               (etml-pixel-spacing
-                etml-block-scroll-bar-gap-pixel)
-               scroll-string
-               (etml-pixel-spacing
-                etml-block-scroll-bar-gap-pixel)
-               border-string))
-      (etml-lines-concat
-       (cond
-        ((eq direction 'left)
-         (list border-string
-               (etml-pixel-spacing
-                etml-block-scroll-bar-gap-pixel)
-               scroll-string))
-        ((eq direction 'right)
-         (list scroll-string
-               (etml-pixel-spacing
-                etml-block-scroll-bar-gap-pixel)
-               border-string)))))))
+         (cond
+          ((eq direction 'left)
+           (list border-string
+                 (etml-pixel-spacing
+                  scroll-bar-gap)
+                 scroll-string))
+          ((eq direction 'right)
+           (list scroll-string
+                 (etml-pixel-spacing
+                  scroll-bar-gap)
+                 border-string))))))))
 
 ;; (mwheel-scroll EVENT &optional ARG)
 ;; FIXME: consider min-width and max-width!
@@ -523,11 +551,11 @@ If type is 'scroll, it's a scroll bar. Use SCROLL-BAR-SIZE,
                    ;; FIXME: if shown-content-height < y-overflow-num
                    ;; y-scroll-bar-size is negative
                    (cond
-                    ((eq etml-block-scroll-bar-direction 'right)
+                    ((eq scroll-bar-direction 'right)
                      (setq right-border-type 'scroll))
-                    ((eq etml-block-scroll-bar-direction 'left)
+                    ((eq scroll-bar-direction 'left)
                      (setq left-border-type 'scroll))
-                    (t (error "Invalid format of etml-block-scroll-bar-direction:%S" etml-block-scroll-bar-direction)))
+                    (t (error "Invalid format of scroll-bar-direction:%S" scroll-bar-direction)))
                    (if (> shown-content-height y-overflow-num)
                        (progn
                          ;; 内容展示高度 > 溢出高度时，计算滚动条高度
