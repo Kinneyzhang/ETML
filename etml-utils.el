@@ -207,4 +207,7 @@ ALIGN should be one of top,center,bottom."
                   max-width align))
                strings "\n")))
 
+(defun etml-frame-bgcolor ()
+  (face-attribute 'default :background))
+
 (provide 'etml-utils)

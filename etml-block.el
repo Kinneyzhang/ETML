@@ -23,18 +23,22 @@
 ;;   "The gap pixel between scroll bar and border when has border.
 ;; If etml-block-scroll-bar-full-p is non-nil, set gaps at both.")
 
-(defvar-local etml-block-caches
-    (make-hash-table
-     :test 'equal :size 100 :rehash-size 1.5 :weakness nil))
+(defvar etml-block-caches nil
+  "Caches of etml-block, it should be set as
+ a buffer-local variable.")
 
-(defun etml-block-scroll-bar-color (block)
-  (let ((cons (oref block scroll-bar-color)))
-    (pcase (etml-background-type)
-      ('light (car cons))
-      ('dark (cdr cons)))))
+(defun etml-block-caches-init (&optional buffer-or-name)
+  "Initialize `etml-block-caches' in BUFFER-OR-NAME."
+  (with-current-buffer (or (and buffer-or-name
+                                (get-buffer-create buffer-or-name))
+                           (current-buffer))
+    (setq-local
+     etml-block-caches
+     (make-hash-table
+      :test 'equal :size 100 :rehash-size 1.5 :weakness nil))))
 
 (defclass etml-block ()
-  ((uuid :initarg :uuid :initform (org-id-uuid) :type string)
+  ((uuid :initarg :uuid :initform (org-id-uuid))
    (content :initarg :content :initform "" :type string)
    (width :initarg :width :initform nil
           :documentation "content pixel width or char number.
@@ -67,8 +71,6 @@ the same with width.")
 2. 当 height > 文本高度时，根据 overflow-y 处理溢出的行。
 支持以下的值: visible(内容溢出到容器外), hidden(截断溢出部分),\
  scroll(默认：内容溢出时支持滚动)。")
-   ;; (scroll-bar-height :initarg :scroll-size
-   ;;                  :documentation "垂直滚动条的高度大小")
    (scroll-offset-x
     :initarg :scroll-offset-x :initform 0
     :documentation "当有溢出时的水平方向的偏移量")
@@ -79,7 +81,7 @@ the same with width.")
                      :initform 2)
    (scroll-bar-color :initarg :scroll-bar-color
                      :initform '("#111" . "#fff"))
-   (scroll-bar-direction :initarg :scroll=bar-direction
+   (scroll-bar-direction :initarg :scroll-bar-direction
                          :initform 'right)
    (scroll-bar-gap
     :initarg :scroll-bar-gap
@@ -208,7 +210,7 @@ Border supports the following formats:
     (if (or (eq direction :left)
             (eq direction :right))
         ;; 左右的 padding 需要处理为像素
-        (etml-width-pixel width)
+        (etml-width-pixel width (oref block content))
       ;; top and bootom padding is the number of lines.
       width)))
 
@@ -236,7 +238,7 @@ Border supports the following formats:
          (width (plist-get plist direction)))
     (if (or (eq direction :left)
             (eq direction :right))
-        (etml-width-pixel width)
+        (etml-width-pixel width (oref block content))
       ;; top and bootom margin is the number of lines.
       width)))
 
@@ -403,7 +405,6 @@ to a symbol 'right, count the right side only."
   "文本设置了宽度之后的原始高度。"
   (etml-string-linum (etml-block-content block)))
 
-;; FIXME: 参数改为 block....
 (defun etml-block-border
     (block n-pixel height &optional border-color
            type scroll-offset
@@ -439,7 +440,9 @@ If type is 'scroll, it's a scroll bar. Use SCROLL-BAR-HEIGHT,
                                   (setq prefix (+ prefix n)))
                                 scroll-bar-steps)))
                      (shown-offset (etml--num-in-prefixs
-                                    scroll-offset prefixs)))
+                                    scroll-offset prefixs))
+                     (uuid (oref block uuid)))
+                ;; 滚动条字符串
                 (setq scroll-string
                       (concat
                        ;; blank before scroll bar
@@ -449,9 +452,28 @@ If type is 'scroll, it's a scroll bar. Use SCROLL-BAR-HEIGHT,
                                   shown-offset)
                                  "\n"))
                        ;; scroll bar
-                       (etml-pixel-border
-                        scroll-bar-pixel
-                        scroll-bar-height scroll-bar-color)
+                       ;; 在滚动条的第一行和最后一行添加 uuid 属性;
+                       ;; shown-offset + 1 时，第一行替换为空，
+                       ;; 最后一行的下一行替换为 scroll-bar;
+                       ;; shown-offset - 1 时相反
+                       (let* ((scroll-bar (etml-pixel-border
+                                           scroll-bar-pixel
+                                           scroll-bar-height
+                                           scroll-bar-color))
+                              (lst (split-string scroll-bar "\n" t)))
+                         (setf (car lst)
+                               (propertize
+                                (car lst)
+                                'etml-block-scroll-bar-start uuid
+                                ;; scroll bar 首行存储 prefixs
+                                ;; 用于计算 shown-offset
+                                'etml-block-scroll-prefixs prefixs))
+                         (setf (car (last lst))
+                               (propertize
+                                (car (last lst))
+                                'etml-block-scroll-bar-end
+                                uuid))
+                         (string-join lst "\n"))
                        ;; blank after scroll bar
                        (when-let* ((rest-height
                                     (- height (or scroll-bar-height 0)
@@ -459,7 +481,15 @@ If type is 'scroll, it's a scroll bar. Use SCROLL-BAR-HEIGHT,
                                    ((> rest-height 0)))
                          (concat "\n" (etml-block-blank
                                        scroll-bar-pixel
-                                       rest-height))))))
+                                       rest-height)))))
+                ;; 设置 etml-block-scroll-bar，用于滚动时识别 scroll bar
+                (setq scroll-string
+                      (mapconcat
+                       (lambda (line)
+                         (propertize
+                          line 'etml-block-scroll-bar uuid))
+                       (split-string scroll-string "\n" t)
+                       "\n")))
             ;; padding部分滚动条填充
             ;; case: pad scroll border in padding line and height is 1
             (setq scroll-string (etml-block-blank
@@ -482,8 +512,6 @@ If type is 'scroll, it's a scroll bar. Use SCROLL-BAR-HEIGHT,
                           border-string))))))
       border-string)))
 
-;; (mwheel-scroll EVENT &optional ARG)
-;; FIXME: consider min-width and max-width!
 (defun etml-block-render (block)
   "返回卡片当前面渲染后的文本"
   (let* ((uuid (oref block uuid))
@@ -532,6 +560,17 @@ If type is 'scroll, it's a scroll bar. Use SCROLL-BAR-HEIGHT,
          (shown-content-rest-lines nil) ;; used in visible
          (left-border-type nil)
          (right-border-type nil)
+
+         (top-margin (etml-block-margin block :top))
+         (bottom-margin (etml-block-margin block :bottom))
+         (top-padding-height (etml-block-padding block :top))
+         (bottom-padding-height (etml-block-padding block :bottom))
+         (top-border (etml-block-single-border block :top))
+         (bottom-border (etml-block-single-border block :bottom))
+         (top-border-pixel (plist-get top-border :width))
+         (bottom-border-pixel (plist-get bottom-border :width))
+         (top-border-color (plist-get top-border :color))
+         (bottom-border-color (plist-get bottom-border :color))
          (_ (when y-overflow-p
               ;; 设置 shown-content-lines 和 y-scroll-bar-height
               (pcase y-overflow
@@ -551,8 +590,6 @@ If type is 'scroll, it's a scroll bar. Use SCROLL-BAR-HEIGHT,
                          (oref block scroll-bar-direction)))
                    ;; 修正超出范围的 offset
                    (setq y-scroll-offset final-y-scroll-offset)
-                   ;; FIXME: if shown-content-height < y-overflow-num
-                   ;; y-scroll-bar-height is negative
                    (cond
                     ((eq scroll-bar-direction 'right)
                      (setq right-border-type 'scroll))
@@ -587,17 +624,40 @@ If type is 'scroll, it's a scroll bar. Use SCROLL-BAR-HEIGHT,
                               (make-list
                                ;; 可以滚动的高度 = 展示内容高度 - 1
                                (1- shown-content-height) each)))))
-                   (puthash uuid shown-content-lines
-                            etml-block-caches)
+                   ;; 给每行文本缓存 block 相关的边界信息和文本内容，用于滚动
+                   ;; 边界信息用于在滚动时设置首行和尾行的边框:
+                   ;; 判断：无 top/bottom padding
+                   ;; 且有 top/bottom border
+                   (puthash
+                    uuid
+                    (list
+                     :lines shown-content-lines
+                     :shown-lines-height shown-content-height
+                     :top-border-pixel top-border-pixel
+                     :bottom-border-pixel bottom-border-pixel
+                     :top-padding-height top-padding-height
+                     :bottom-padding-height bottom-padding-height
+                     :top-border-color top-border-color
+                     :bottom-border-color bottom-border-color)
+                    etml-block-caches)
                    (setq shown-content-lines
-                         (mapcar
-                          (lambda (line)
+                         (seq-subseq shown-content-lines start end))
+                   (setq shown-content-lines
+                         (seq-map-indexed
+                          (lambda (line idx)
                             (propertize
-                             line 'etml-block-line uuid
-                             'etml-block-y-offset y-scroll-offset))
-                          shown-content-lines))
-                   (setq shown-content-lines
-                         (seq-subseq shown-content-lines start end))))
+                             line
+                             'etml-block-line uuid
+                             ;; etml-block-line-idx 是当前行相对于展示
+                             ;; 的文本的偏移量。
+                             ;; 用于判断是否为当前展示的首行或尾行
+                             'etml-block-line-idx idx
+                             ;; etml-block-y-offset 是当前行相对于
+                             ;; 所有行文本的偏移量
+                             'etml-block-y-offset y-scroll-offset
+                             'etml-block-y-height shown-content-height
+                             'keymap (etml-block-scroll-map)))
+                          shown-content-lines))))
                 ('hidden
                  (setq shown-content-lines
                        (seq-subseq content-lines
@@ -613,7 +673,7 @@ If type is 'scroll, it's a scroll bar. Use SCROLL-BAR-HEIGHT,
                 ;;                    content-height)))
                 (_ (error "Invalid format of y-overflow: %S"
                           y-overflow)))))
-         
+
          ;; height 不包含 padding and margin
          ;; text includes content and empty lines
          (text (etml-lines-align
@@ -661,39 +721,35 @@ If type is 'scroll, it's a scroll bar. Use SCROLL-BAR-HEIGHT,
                  (etml-pixel-spacing right-padding)
                  right-border-string
                  right-margin-string)))
-         (top-margin (etml-block-margin block :top))
-         (bottom-margin (etml-block-margin block :bottom))
-         (top-padding (etml-block-padding block :top))
-         (bottom-padding (etml-block-padding block :bottom))
-         (bottom-border (etml-block-single-border block :bottom))
-         (top-border (etml-block-single-border block :top))
          (block-lines (split-string block-string "\n" t)))
-    
+
     ;; 设置上下 padding
     (if (and (= text-linum 1)
-             (< top-padding 1) (< bottom-padding 1))
+             (< top-padding-height 1) (< bottom-padding-height 1))
         ;; 特殊情况：只有一行，且上下 0 < padding < 1
-        (unless (and (= top-padding 0) (= bottom-padding 0))
+        (unless (and (= top-padding-height 0)
+                     (= bottom-padding-height 0))
           (setf (car block-lines)
                 (etml-propertize
                  (concat (car block-lines) "\n")
-                 `(line-height ,(+ 1 top-padding bottom-padding)
-                               display (raise ,bottom-padding)))))
+                 `( line-height ,(+ 1 top-padding-height
+                                    bottom-padding-height)
+                    display (raise ,bottom-padding-height)))))
       ;; 一般情况，padding > 1，设置像素行；padding < 1，设置 line-height
       ;; set top padding for start line
       (cond
-       ((= top-padding 0) (ignore))
-       ((< top-padding 1)
+       ((= top-padding-height 0) (ignore))
+       ((< top-padding-height 1)
         (setf (car block-lines)
               (etml-propertize
                ;; first line already ends with \n here
                (concat (car block-lines) "\n")
-               `(line-height ,(1+ top-padding)))))
-       ((>= top-padding 1)
+               `(line-height ,(1+ top-padding-height)))))
+       ((>= top-padding-height 1)
         (setq block-lines
               (append
                (make-list
-                top-padding
+                top-padding-height
                 ;; padding 行需要加上左右边框及左右 margin
                 (concat
                  left-margin-string
@@ -711,19 +767,19 @@ If type is 'scroll, it's a scroll bar. Use SCROLL-BAR-HEIGHT,
                block-lines))))
       ;; set bottom padding for end line
       (cond
-       ((= bottom-padding 0) (ignore))
-       ((< bottom-padding 1)
+       ((= bottom-padding-height 0) (ignore))
+       ((< bottom-padding-height 1)
         (setf (car (last block-lines))
               (etml-propertize
                ;; last line always ends with \n
                (concat (car (last block-lines)) "\n")
-               `(line-height (nil ,(1+ bottom-padding))))))
-       ((>= bottom-padding 1)
+               `(line-height (nil ,(1+ bottom-padding-height))))))
+       ((>= bottom-padding-height 1)
         (setq block-lines
               (append
                block-lines
                (make-list
-                bottom-padding
+                bottom-padding-height
                 ;; padding 行需要加上左右边框及margin
                 (concat
                  left-margin-string
@@ -753,9 +809,9 @@ If type is 'scroll, it's a scroll bar. Use SCROLL-BAR-HEIGHT,
                          line `(face (:background ,bgcolor))
                          left-inc (- (length line) right-dec))))
                     block-lines)))
-    
+
     ;; 给首行设置上边框，不能包含左右 margin
-    (when (> (plist-get top-border :width) 0)
+    (when (> top-border-pixel 0)
       ;; 属性设置要去除开头结尾的 margin 位置
       (let ((left-inc (if (> left-margin 0) 1 0))
             (right-dec (if (> right-margin 0) 1 0))
@@ -771,9 +827,9 @@ If type is 'scroll, it's a scroll bar. Use SCROLL-BAR-HEIGHT,
                   (etml-propertize
                    line `(face (:overline ,color))
                    left-inc (- (length line) right-dec)))))))
-    
+
     ;; 新增下边框行，要pad上左右 margin
-    (when (> (plist-get bottom-border :width) 0) 
+    (when (> bottom-border-pixel 0) 
       ;; 属性设置要去除开头结尾的 margin 位置
       (let ((left-inc (if (> left-margin 0) 1 0))
             (right-dec (if (> right-margin 0) 1 0)))
@@ -810,7 +866,7 @@ If type is 'scroll, it's a scroll bar. Use SCROLL-BAR-HEIGHT,
            block-lines
            (make-list
             bottom-margin (etml-pixel-spacing total-pixel))))
-    
+
     ;; !!必须要在最后连接所有行，因为中间直接字符串操作可能使 line-height 失效
     (setq block-string
           (mapconcat (lambda (line)
@@ -837,6 +893,255 @@ ALIGN should be one of top,center,bottom."
 ;;;###autoload
 (defun etml-block-string (&rest kvs)
   (etml-block-render (apply #'etml-block kvs)))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; etml block scroll
+
+(defvar etml-block-scroll-down-keys '("n" [wheel-down]))
+(defvar etml-block-scroll-up-keys '("p" [wheel-up]))
+(defvar etml-block-redraw-keys '("g"))
+
+(defun etml-block-scroll-map ()
+  (let ((map (make-sparse-keymap)))
+    (dolist (key etml-block-scroll-down-keys)
+      (define-key map key #'etml-block-scroll-down))
+    (dolist (key etml-block-scroll-up-keys)
+      (define-key map key #'etml-block-scroll-up))
+    map))
+
+(defun etml-block-scroll-bar-color (block)
+  (let ((color (oref block scroll-bar-color)))
+    (when (stringp color)
+      (setq color (cons color color)))
+    (pcase (etml-background-type)
+      ('light (car color))
+      ('dark (cdr color)))))
+
+(defun etml-block-scroll (up-or-down)
+  (when-let* ((props (text-properties-at (point)))
+              ;; 当前光标所在行 idx，用于滚动后保持光标位置
+              (line-idx (plist-get props 'etml-block-line-idx))
+              (uuid (plist-get props 'etml-block-line))
+              (offset (plist-get props 'etml-block-y-offset)))
+    (when-let* ((inhibit-read-only t)
+                (caches (gethash uuid etml-block-caches))
+                ;; (_ (elog-info "offset:%s" offset))
+                (content-shown-height
+                 (plist-get caches :shown-lines-height))
+                (top-padding-height
+                 (plist-get caches :top-padding-height))
+                (bottom-padding-height
+                 (plist-get caches :bottom-padding-height))
+                (top-border-pixel
+                 (plist-get caches :top-border-pixel))
+                (bottom-border-pixel
+                 (plist-get caches :bottom-border-pixel))
+                (lines (plist-get caches :lines))
+                (content-total-height (length lines))
+                (max-offset (- content-total-height
+                               content-shown-height))
+                (all-content-idx offset)
+                (new-offset
+                 ;; content-height - shown-content-height
+                 (cond ((eq 'down up-or-down) (1+ offset))
+                       ((eq 'up up-or-down) (1- offset))))
+                (shown-content-idx 0))
+      (when (and (>= new-offset 0)
+                 (<= new-offset max-offset))
+        (save-excursion
+          (goto-char (point-min))
+          ;; 根据 uuid 属性搜索并将每一行替换为滚动后的新的文本
+          (while-let ((match (text-property-search-forward
+                              'etml-block-line uuid t))
+                      (start (prop-match-beginning match))
+                      (end (prop-match-end match))
+                      (line (nth
+                             (cond
+                              ((eq 'down up-or-down)
+                               (1+ all-content-idx))
+                              ((eq 'up up-or-down)
+                               (1- all-content-idx)))
+                             lines)))
+            (setq line (propertize
+                        line
+                        'etml-block-line uuid
+                        'etml-block-line-idx shown-content-idx
+                        'etml-block-y-offset new-offset
+                        'etml-block-y-height content-shown-height
+                        'keymap (etml-block-scroll-map)))
+            ;; padding < 1 and has top/bottom border
+            ;; should set top and bottom border
+            (cond
+             ((= shown-content-idx 0)
+              (when (and (< top-padding-height 1)
+                         (> top-border-pixel 0))
+                (setq line
+                      (propertize
+                       line 'face
+                       `(:overline
+                         ,(plist-get caches :top-border-color))))))
+             ((= shown-content-idx (1- content-shown-height))
+              (when (and (< bottom-padding-height 1)
+                         (> bottom-border-pixel 0))
+                (setq line
+                      (propertize
+                       line 'face
+                       `(:underline
+                         ( :color ,(plist-get caches
+                                              :top-border-color)
+                           :position t)))))))
+            (delete-region start end)
+            (goto-char start)
+            (insert line)
+            (cl-incf all-content-idx 1)
+            (cl-incf shown-content-idx 1)))
+        ;; 根据 uuid 属性搜索并设置滚动条的首行和尾行
+        (goto-char (point-min))
+        (when-let*
+            ((scroll-top-match
+              (text-property-search-forward
+               'etml-block-scroll-bar-start uuid t))
+             (scroll-top-start
+              (prop-match-beginning scroll-top-match))
+             (scroll-top-end
+              (prop-match-end scroll-top-match))
+             (scroll-bar-color
+              (save-excursion
+                (goto-char scroll-top-start)
+                (plist-get
+                 (plist-get (text-properties-at (point))
+                            'face)
+                 :foreground)))
+             (prefixs
+              (plist-get
+               (text-properties-at scroll-top-start)
+               'etml-block-scroll-prefixs))
+             (prev-shown-offset (etml--num-in-prefixs
+                                 offset prefixs))
+             (curr-shown-offset (etml--num-in-prefixs
+                                 new-offset prefixs))
+             ;; shown-offset 有变化时，才移动滚动条
+             ((not (= prev-shown-offset
+                      curr-shown-offset)))
+             ;; (one-line-scroll-bar
+             ;;  (buffer-substring scroll-top-start
+             ;;                    scroll-top-end))
+             ;; (scroll-bar-pixel (string-pixel-width
+             ;;                    one-line-scroll-bar))
+             )
+          (save-excursion
+            (goto-char (point-min))
+            (when-let* ((scroll-bottom-match
+                         (text-property-search-forward
+                          'etml-block-scroll-bar-end uuid t))
+                        (scroll-bottom-start
+                         (prop-match-beginning scroll-bottom-match))
+                        (scroll-bottom-end
+                         (prop-match-end scroll-bottom-match)))
+              (cond
+               ;; 向下滚动
+               ((eq 'down up-or-down)
+                (goto-char scroll-top-start)
+                ;; 首行 face 和 etml-block-scroll-bar-start 属性清空
+                (add-text-properties
+                 (point) (1+ (point))
+                 '( face nil
+                    etml-block-scroll-bar-start nil
+                    etml-block-scroll-prefixs nil))
+                ;; 如果 padding < 1 且有上边框，需要保留上边框 face
+                (when (and (< top-padding-height 1)
+                           (= prev-shown-offset 0)
+                           (> top-border-pixel 0))
+                  (add-text-properties
+                   (point) (1+ (point))
+                   `(face (:overline
+                           ,(plist-get
+                             caches :top-border-color)))))
+                ;; 第二行设置为新的首行
+                ;; (next-logical-line 1)
+                (goto-char scroll-top-end)
+                (when-let* ((match (text-property-search-forward
+                                    'etml-block-scroll-bar uuid t))
+                            (start (prop-match-beginning match))
+                            (end (prop-match-end match)))
+                  (add-text-properties
+                   start end
+                   `( etml-block-scroll-bar-start ,uuid
+                      etml-block-scroll-prefixs ,prefixs)))
+                ;; 尾行的 etml-block-scroll-bar-start 属性清空
+                (add-text-properties
+                 scroll-bottom-start scroll-bottom-end
+                 '(etml-block-scroll-bar-end nil))
+                ;; 尾行的下一行设置为滚动条，并设置为新的尾行 uuid 属性
+                (goto-char scroll-bottom-end)
+                (when-let* ((match (text-property-search-forward
+                                    'etml-block-scroll-bar uuid t))
+                            (start (prop-match-beginning match))
+                            (end (prop-match-end match)))
+                  (add-text-properties
+                   start end
+                   `( face ( :inverse-video t
+                             :foreground ,scroll-bar-color)
+                      etml-block-scroll-bar-end ,uuid))))
+               ;; 向上滚动
+               ((eq 'up up-or-down)
+                ;; 尾行 face 和 etml-block-scroll-bar-start 属性清空
+                (add-text-properties
+                 scroll-bottom-start scroll-bottom-end
+                 '(face nil etml-block-scroll-bar-end nil))
+                ;; 如果 padding < 1 且有下边框，需要保留下边框 face
+                (when (and (< bottom-padding-height 1)
+                           (= prev-shown-offset
+                              (1- content-shown-height))
+                           (> bottom-border-pixel 0))
+                  (add-text-properties
+                   scroll-bottom-start scroll-bottom-end
+                   `(face
+                     (:underline
+                      ( :position t
+                        :color ,(plist-get
+                                 caches :bottom-border-color))))))
+                ;; 倒数第二行设置新的尾行
+                (goto-char scroll-bottom-start)
+                (when-let* ((match (text-property-search-backward
+                                    'etml-block-scroll-bar uuid t))
+                            (start (prop-match-beginning match))
+                            (end (prop-match-end match)))
+                  (add-text-properties
+                   start end
+                   `(etml-block-scroll-bar-end ,uuid)))
+                ;; 首行的 etml-block-scroll-bar-start 属性清空
+                (add-text-properties
+                 scroll-top-start scroll-top-end
+                 '( etml-block-scroll-bar-start nil
+                    etml-block-scroll-prefixs nil))
+                ;; 首行的上一行设置为滚动条，并设置为新的首行
+                (goto-char scroll-top-start)
+                (when-let* ((match (text-property-search-backward
+                                    'etml-block-scroll-bar uuid t))
+                            (start (prop-match-beginning match))
+                            (end (prop-match-end match)))
+                  (add-text-properties
+                   start end
+                   `( face ( :inverse-video t
+                             :foreground ,scroll-bar-color)
+                      etml-block-scroll-bar-start ,uuid
+                      etml-block-scroll-prefixs ,prefixs))))))))))
+    (goto-char (point-min))
+    ;; 滚动之后，重定向光标到当前行文本的开头
+    (when-let ((match (text-property-search-forward
+                       'etml-block-line-idx line-idx t)))
+      (goto-char (prop-match-beginning match)))))
+
+;;;###autoload
+(defun etml-block-scroll-up ()
+  (interactive)
+  (etml-block-scroll 'up))
+
+;;;###autoload
+(defun etml-block-scroll-down ()
+  (interactive)
+  (etml-block-scroll 'down))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
