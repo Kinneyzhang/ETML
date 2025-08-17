@@ -43,7 +43,7 @@
                   :scroll-bar-direction 'left
                   :scroll-bar-gap 4)
       (etml-block :content etml-test-scroll-str2
-                  :height 20 :width '(240)
+                  :height 18 :width '(240)
                   :border t
                   :bgcolor '("#FFF9F0" . "#222222")
                   :margin '(1 . 0) :padding '(1 . 1)
@@ -51,7 +51,7 @@
                   :scroll-bar-full t
                   :scroll-bar-gap 2))
      (etml-block :content etml-test-scroll-str1
-                 :height 33 :width '(350)
+                 :height 31 :width '(350)
                  :border t
                  :bgcolor '("#FFF9F0" . "#222222")
                  :margin '(1 . 1) :padding '(1 . 1)
@@ -60,7 +60,7 @@
                  :scroll-bar-gap 0)
      (etml-block-stack
       (etml-block :content etml-test-scroll-str1
-                  :height 15 :width '(550)
+                  :height 13 :width '(550)
                   :border nil
                   :margin '(1 . 1) :padding '(1 . 1)
                   :scroll-bar-full t
