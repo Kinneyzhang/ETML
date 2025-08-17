@@ -632,6 +632,7 @@ If type is 'scroll, it's a scroll bar. Use SCROLL-BAR-HEIGHT,
                     uuid
                     (list
                      :lines shown-content-lines
+                     :bgcolor (etml-block-bgcolor block)
                      :shown-lines-height shown-content-height
                      :top-border-pixel top-border-pixel
                      :bottom-border-pixel bottom-border-pixel
@@ -651,7 +652,8 @@ If type is 'scroll, it's a scroll bar. Use SCROLL-BAR-HEIGHT,
                              ;; etml-block-line-idx 是当前行相对于展示
                              ;; 的文本的偏移量。
                              ;; 用于判断是否为当前展示的首行或尾行
-                             'etml-block-line-idx idx
+                             'etml-block-line-idx
+                             (format "%s:%s" uuid idx)
                              ;; etml-block-y-offset 是当前行相对于
                              ;; 所有行文本的偏移量
                              'etml-block-y-offset y-scroll-offset
@@ -899,7 +901,7 @@ ALIGN should be one of top,center,bottom."
 
 (defvar etml-block-scroll-down-keys '("n" [wheel-down]))
 (defvar etml-block-scroll-up-keys '("p" [wheel-up]))
-(defvar etml-block-redraw-keys '("g"))
+;; (defvar etml-block-redraw-keys '("g"))
 
 (defun etml-block-scroll-map ()
   (let ((map (make-sparse-keymap)))
@@ -925,7 +927,6 @@ ALIGN should be one of top,center,bottom."
               (offset (plist-get props 'etml-block-y-offset)))
     (when-let* ((inhibit-read-only t)
                 (caches (gethash uuid etml-block-caches))
-                ;; (_ (elog-info "offset:%s" offset))
                 (content-shown-height
                  (plist-get caches :shown-lines-height))
                 (top-padding-height
@@ -948,7 +949,7 @@ ALIGN should be one of top,center,bottom."
                 (shown-content-idx 0))
       (when (and (>= new-offset 0)
                  (<= new-offset max-offset))
-        (save-excursion
+        (let ((bgcolor (plist-get caches :bgcolor)))
           (goto-char (point-min))
           ;; 根据 uuid 属性搜索并将每一行替换为滚动后的新的文本
           (while-let ((match (text-property-search-forward
@@ -965,7 +966,8 @@ ALIGN should be one of top,center,bottom."
             (setq line (propertize
                         line
                         'etml-block-line uuid
-                        'etml-block-line-idx shown-content-idx
+                        'etml-block-line-idx
+                        (format "%s:%s" uuid shown-content-idx)
                         'etml-block-y-offset new-offset
                         'etml-block-y-height content-shown-height
                         'keymap (etml-block-scroll-map)))
@@ -992,7 +994,10 @@ ALIGN should be one of top,center,bottom."
                            :position t)))))))
             (delete-region start end)
             (goto-char start)
-            (insert line)
+            (if bgcolor
+                (insert (propertize
+                         line 'face `(:background ,bgcolor)))
+              (insert line))
             (cl-incf all-content-idx 1)
             (cl-incf shown-content-idx 1)))
         ;; 根据 uuid 属性搜索并设置滚动条的首行和尾行
@@ -1008,10 +1013,13 @@ ALIGN should be one of top,center,bottom."
              (scroll-bar-color
               (save-excursion
                 (goto-char scroll-top-start)
-                (plist-get
-                 (plist-get (text-properties-at (point))
-                            'face)
-                 :foreground)))
+                (let ((plist
+                       (seq-mapcat
+                        (lambda (elem)
+                          (if (consp elem) elem (list elem)))
+                        (plist-get (text-properties-at (point))
+                                   'face))))
+                  (plist-get plist :foreground))))
              (prefixs
               (plist-get
                (text-properties-at scroll-top-start)

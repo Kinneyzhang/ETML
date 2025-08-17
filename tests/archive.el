@@ -1,3 +1,20 @@
+(defun etml-block-scroll-show (&optional force)
+  (interactive)
+  (let ((buffer (get-buffer-create "*etml-scroll-tests*")))
+    (if-let ((win (get-buffer-window buffer)))
+        (progn
+          (select-window win)
+          (when force
+            (etml-block-scroll-render buffer)))
+      (switch-to-buffer buffer)
+      (etml-block-scroll-render buffer))))
+
+(defun etml-set-cursor ()
+  "Set cursor type correctly in current buffer."
+  (interactive)
+  (run-with-idle-timer
+   0.001 nil (lambda () (setq-local cursor-type t))))
+
 (defun etml-block-parse-total-pixel (block slot)
   (when-let ((width (eval `(oref ,block ,slot))))
     (cond

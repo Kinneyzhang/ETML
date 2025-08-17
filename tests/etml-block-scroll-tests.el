@@ -3,60 +3,79 @@
 
 (defvar etml-test-scroll-block nil)
 
-(setq etml-test-scroll-block
-      (etml-block
-       :content (string-trim-right
-                 (file-content
-                  ;; "./text-zh-en_US.txt"
-                  "./text-zh.txt"
-                  )
-                 "\n")
-       :border t
-       :height 20
-       :width '(400)
-       :margin '(1 . 1)
-       :padding '(2 . 1)
-       :overflow 'scroll
-       :scroll-offset-y 14
-       :scroll-bar-full t
-       :scroll-bar-direction 'right
-       :scroll-bar-color "grey"
-       :scroll-bar-pixel 2
-       :scroll-bar-gap 2
-       ))
+(defvar etml-test-scroll-str1
+  (string-trim-right (file-content "./text-zh.txt") "\n"))
 
-(defun etml-set-cursor ()
-  "Set cursor type correctly in current buffer."
-  (interactive)
-  (run-with-idle-timer
-   0.001 nil (lambda () (setq-local cursor-type t))))
+(defvar etml-test-scroll-str2
+  (string-trim-right (file-content "./text-zh-en_US.txt") "\n"))
 
-(defun etml-block-scroll-render (buffer)
-  (with-current-buffer buffer
-    (kill-all-local-variables)
-    (etml-block-caches-init)
-    (let ((inhibit-read-only t)
-          start end)
-      (erase-buffer)
-      (buffer-disable-undo)
-      (setq-local text-scale-mode-step 0)
-      (insert (etml-block-render
-               etml-test-scroll-block))
-      (auto-modal-mode -1)
-      (etml-set-cursor)
-      (read-only-mode 1))))
+(defvar etml-test-scroll-str3
+  (string-trim-right (file-content "./text-en_US.txt") "\n"))
 
-(defun etml-block-scroll-show (&optional force)
-  (interactive)
-  (let ((buffer (get-buffer-create "*etml-scroll-tests*")))
-    (if-let ((win (get-buffer-window buffer)))
-        (progn
-          (select-window win)
-          (when force
-            (etml-block-scroll-render buffer)))
-      (switch-to-buffer buffer)
-      (etml-block-scroll-render buffer))))
+(defmacro etml-block-scroll-render (buffer &rest body)
+  (declare (indent defun))
+  `(let ((buffer (get-buffer-create ,buffer)))
+     (delete-other-windows)
+     (switch-to-buffer buffer)
+     (with-current-buffer buffer
+       (kill-all-local-variables)
+       (etml-block-caches-init)
+       (let ((inhibit-read-only t))
+         (local-set-key "q" 'etml-test-quit-window)
+         (erase-buffer)
+         (buffer-disable-undo)
+         (setq-local text-scale-mode-step 0)
+         ,@body
+         (when (fboundp 'auto-modal-mode)
+           (auto-modal-mode -1))
+         (read-only-mode 1)))))
 
-(etml-block-scroll-show t)
+(etml-block-scroll-render "*test-block-scroll*"
+  (insert
+   (etml-block-render
+    (etml-block-concat
+     (etml-block-stack
+      (etml-block :content etml-test-scroll-str2
+                  :height 10 :width '(240)
+                  :border t
+                  :bgcolor '("#FFF9F0" . "#222222")
+                  :margin '(1 . 1) :padding '(1 . 1)
+                  :scroll-bar-direction 'left
+                  :scroll-bar-gap 4)
+      (etml-block :content etml-test-scroll-str2
+                  :height 20 :width '(240)
+                  :border t
+                  :bgcolor '("#FFF9F0" . "#222222")
+                  :margin '(1 . 0) :padding '(1 . 1)
+                  :scroll-bar-direction 'right
+                  :scroll-bar-full t
+                  :scroll-bar-gap 2))
+     (etml-block :content etml-test-scroll-str1
+                 :height 33 :width '(350)
+                 :border t
+                 :bgcolor '("#FFF9F0" . "#222222")
+                 :margin '(1 . 1) :padding '(1 . 1)
+                 :scroll-bar-full t
+                 :scroll-bar-pixel 2
+                 :scroll-bar-gap 0)
+     (etml-block-stack
+      (etml-block :content etml-test-scroll-str1
+                  :height 15 :width '(550)
+                  :border nil
+                  :margin '(1 . 1) :padding '(1 . 1)
+                  :scroll-bar-full t
+                  :scroll-bar-pixel 8
+                  :scroll-bar-gap 0)
+      (etml-block :content (propertize etml-test-scroll-str3
+                                       'face '(:family "Noto Serif"))
+                  :height 15 :width '(550)
+                  :border '(:top t :bottom t)
+                  :margin '(1 . 0) :padding '(4 . 1)
+                  :scroll-bar-direction 'left
+                  :scroll-bar-full nil
+                  :scroll-bar-pixel 3
+                  :scroll-bar-color "orange"
+                  :scroll-bar-gap 4)))))
+  (goto-char (point-min)))
 
 (provide 'etml-block-scroll-tests)
