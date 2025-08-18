@@ -3,6 +3,7 @@
 ;; block 的 width 为 (num) 时，表示整个 block 的像素宽度
 ;; block 的 width 为 num 时，表示内容部分的字符的个数
 
+(require 'org-id)
 (require 'etml-utils)
 
 ;; (defvar etml-block-scroll-bar-pixel 2
@@ -521,6 +522,7 @@ If type is 'scroll, it's a scroll bar. Use SCROLL-BAR-HEIGHT,
           (if (string-empty-p content)
               (list "")
             (split-string content "\n" t)))
+         ;; FIXME: keep face after ekp justify!!!
          (content-height (etml-string-linum content))
          ;; process overflow, scroll-bar-height and scroll-offset
          ;; 判断是否溢出
@@ -978,25 +980,26 @@ ALIGN should be one of top,center,bottom."
               (when (and (< top-padding-height 1)
                          (> top-border-pixel 0))
                 (setq line
-                      (propertize
-                       line 'face
-                       `(:overline
-                         ,(plist-get caches :top-border-color))))))
+                      (etml-propertize
+                       line
+                       `(face (:overline
+                               ,(plist-get caches :top-border-color)))))))
              ((= shown-content-idx (1- content-shown-height))
               (when (and (< bottom-padding-height 1)
                          (> bottom-border-pixel 0))
                 (setq line
-                      (propertize
-                       line 'face
-                       `(:underline
-                         ( :color ,(plist-get caches
-                                              :top-border-color)
-                           :position t)))))))
+                      (etml-propertize
+                       line
+                       `(face
+                         (:underline
+                          ( :color ,(plist-get caches
+                                               :top-border-color)
+                            :position t))))))))
             (delete-region start end)
             (goto-char start)
             (if bgcolor
-                (insert (propertize
-                         line 'face `(:background ,bgcolor)))
+                (insert (etml-propertize
+                         line `(face (:background ,bgcolor))))
               (insert line))
             (cl-incf all-content-idx 1)
             (cl-incf shown-content-idx 1)))
@@ -1049,22 +1052,26 @@ ALIGN should be one of top,center,bottom."
               (cond
                ;; 向下滚动
                ((eq 'down up-or-down)
-                (goto-char scroll-top-start)
-                ;; 首行 face 和 etml-block-scroll-bar-start 属性清空
+                ;; 首行 face 的 :inverse-video :foreground 清空
+                (etml-remove-face-attributes
+                 scroll-top-start scroll-top-end
+                 '(:inverse-video :foreground))
+                ;; 首行 etml-block-scroll-bar-start 属性清空
                 (add-text-properties
-                 (point) (1+ (point))
-                 '( face nil
-                    etml-block-scroll-bar-start nil
+                 scroll-top-start scroll-top-end
+                 '( etml-block-scroll-bar-start nil
                     etml-block-scroll-prefixs nil))
+                
                 ;; 如果 padding < 1 且有上边框，需要保留上边框 face
-                (when (and (< top-padding-height 1)
-                           (= prev-shown-offset 0)
-                           (> top-border-pixel 0))
-                  (add-text-properties
-                   (point) (1+ (point))
-                   `(face (:overline
-                           ,(plist-get
-                             caches :top-border-color)))))
+                ;; (when (and (< top-padding-height 1)
+                ;;            (= prev-shown-offset 0)
+                ;;            (> top-border-pixel 0))
+                ;;   (add-text-properties
+                ;;    scroll-top-start scroll-top-end
+                ;;    `(face (:overline
+                ;;            ,(plist-get
+                ;;              caches :top-border-color)))))
+                
                 ;; 第二行设置为新的首行
                 ;; (next-logical-line 1)
                 (goto-char scroll-top-end)
@@ -1093,22 +1100,28 @@ ALIGN should be one of top,center,bottom."
                       etml-block-scroll-bar-end ,uuid))))
                ;; 向上滚动
                ((eq 'up up-or-down)
-                ;; 尾行 face 和 etml-block-scroll-bar-start 属性清空
+                ;; 尾行的 scroll bar face 清空
+                (etml-remove-face-attributes
+                 scroll-bottom-start scroll-bottom-end
+                 '(:inverse-video :foreground))
+                ;; 尾行的 etml-block-scroll-bar-start 属性清空
                 (add-text-properties
                  scroll-bottom-start scroll-bottom-end
-                 '(face nil etml-block-scroll-bar-end nil))
+                 '(etml-block-scroll-bar-end nil))
+                
                 ;; 如果 padding < 1 且有下边框，需要保留下边框 face
-                (when (and (< bottom-padding-height 1)
-                           (= prev-shown-offset
-                              (1- content-shown-height))
-                           (> bottom-border-pixel 0))
-                  (add-text-properties
-                   scroll-bottom-start scroll-bottom-end
-                   `(face
-                     (:underline
-                      ( :position t
-                        :color ,(plist-get
-                                 caches :bottom-border-color))))))
+                ;; (when (and (< bottom-padding-height 1)
+                ;;            (= prev-shown-offset
+                ;;               (1- content-shown-height))
+                ;;            (> bottom-border-pixel 0))
+                ;;   (add-text-properties
+                ;;    scroll-bottom-start scroll-bottom-end
+                ;;    `(face
+                ;;      (:underline
+                ;;       ( :position t
+                ;;         :color ,(plist-get
+                ;;                  caches :bottom-border-color))))))
+                
                 ;; 倒数第二行设置新的尾行
                 (goto-char scroll-bottom-start)
                 (when-let* ((match (text-property-search-backward

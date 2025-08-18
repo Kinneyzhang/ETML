@@ -33,6 +33,59 @@
               start end prop value string)))))
     string))
 
+(defun etml-remove-face-attributes (start end removed-attributes)
+  "将 scroll bar 的 face 清空，变为像素空格"
+  ;; 局限性: 用 start 的 face 属性处理之后，渲染到所有字符上面
+  ;; 因此只能来处理取消 scroll bar 的属性
+  ;; 先取出 face properties
+  (let ((face-properties (get-text-property start 'face))
+        not-kv-faces)
+    (when (consp face-properties)
+      (let ((face-properties (seq-mapcat (lambda (elem)
+                                           (if (consp elem)
+                                               elem
+                                             (list elem)))
+                                         face-properties)))
+        ;; face-properties 开头可能会有非 kv 形式的face，需要保留
+        (catch 'break
+          (while-let ((not-kv-face (car face-properties)))
+            (if (not (keywordp not-kv-face))
+                (progn
+                  (when (facep not-kv-face)
+                    (push not-kv-face not-kv-faces))
+                  (pop face-properties))
+              (throw 'break nil))))
+        ;; 剩下的是一个 plist
+        (dolist (attribute removed-attributes)
+          (plist-put face-properties attribute nil))
+        ;; 合并 not-kv-faces 和 kv-faces
+        (add-text-properties
+         start end
+         `(face ,(append not-kv-faces face-properties)))))))
+
+;; (defun etml-add-text-properties (start end properties)
+;;   "前提是 start 和 end 之间的所有文本属性相同，支持将属性的中属性值清空。
+;; 比如 '(face (:inverse-video nil :foreground nil))"
+;;   (while properties
+;;     (let ((prop (pop properties))
+;;           (value (pop properties)))
+;;       (let ((ori-value (get-text-property start prop)))
+;;         ;; 去除前面的非 plist 属性部分
+;;         ;; value 和 ori-values 比对合并
+;;         (if (consp ori-props)
+;;             (seq-mapcat (lambda (elem)
+;;                           (if (consp elem)
+;;                               elem
+;;                             (list elem)))
+;;                         ori-props)
+;;           ori-value)
+;;         value
+;;         )
+;;       (cond
+;;        ((eq prop 'face))
+;;        )
+;;       )))
+
 (defun etml-width-pixel (width &optional content)
   "Return the pixel of etml width. If WIDTH is a cons-cell,
  use the car of it as pixel. If WIDTH is a integer, use the

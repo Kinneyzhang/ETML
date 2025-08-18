@@ -1,14 +1,25 @@
 (require 'etml-test)
 (require 'etml-block)
 
+(defface etml-mono-face
+  '((t :font "LXGW WenKai Mono" :height 150))
+  "")
+
+;;; FIXME: ekp 纯英文识别字体有问题，必须要加英文才能正确识别出字体！！！
 (defvar etml-test-scroll-str1
-  (string-trim-right (org-file-contents "./text-zh.txt") "\n"))
+  (propertize
+   (string-trim-right (org-file-contents "./text-zh.txt") "\n")
+   'face 'etml-mono-face))
 
 (defvar etml-test-scroll-str2
-  (string-trim-right (org-file-contents "./text-zh-en_US.txt") "\n"))
+  (propertize
+   (string-trim-right (org-file-contents "./text-zh-en_US.txt") "\n")
+   'face 'etml-mono-face))
 
 (defvar etml-test-scroll-str3
-  (string-trim-right (org-file-contents "./text-en_US.txt") "\n"))
+  (propertize
+   (string-trim-right (org-file-contents "./text-en_US.txt") "\n")
+   'face 'etml-mono-face))
 
 (defmacro etml-block-scroll-render (buffer &rest body)
   (declare (indent defun))
@@ -34,24 +45,24 @@
     (etml-block-concat
      (etml-block-stack
       (etml-block :content etml-test-scroll-str2
-                  :height 10 :width '(240)
+                  :height 15 :width '(240)
                   :border t
-                  :bgcolor '("#FFF9F0" . "#222222")
+                  ;; :bgcolor '("#FFF9F0" . "#222222")
                   :margin '(1 . 1) :padding '(1 . 1)
                   :scroll-bar-direction 'left
                   :scroll-bar-gap 4)
       (etml-block :content etml-test-scroll-str2
-                  :height 18 :width '(240)
+                  :height 23 :width '(240)
                   :border t
-                  :bgcolor '("#FFF9F0" . "#222222")
+                  ;; :bgcolor '("#FFF9F0" . "#222222")
                   :margin '(1 . 0) :padding '(1 . 1)
                   :scroll-bar-direction 'right
                   :scroll-bar-full t
                   :scroll-bar-gap 2))
      (etml-block :content etml-test-scroll-str1
-                 :height 31 :width '(350)
+                 :height 41 :width '(350)
                  :border t
-                 :bgcolor '("#FFF9F0" . "#222222")
+                 ;; :bgcolor '("#FFF9F0" . "#222222")
                  :margin '(1 . 1) :padding '(1 . 1)
                  :scroll-bar-full t
                  :scroll-bar-pixel 2
@@ -64,9 +75,8 @@
                   :scroll-bar-full t
                   :scroll-bar-pixel 8
                   :scroll-bar-gap 0)
-      (etml-block :content (propertize etml-test-scroll-str3
-                                       'face '(:family "Noto Serif"))
-                  :height 15 :width '(550)
+      (etml-block :content etml-test-scroll-str3
+                  :height 25 :width '(550)
                   :border '(:top t :bottom t)
                   :margin '(1 . 0) :padding '(4 . 1)
                   :scroll-bar-direction 'left
@@ -76,4 +86,12 @@
                   :scroll-bar-gap 4)))))
   (goto-char (point-min)))
 
+;; (ekp-clear-caches)
+
 (provide 'etml-block-scroll-tests)
+
+;; (ekp-font-family
+;;  "你好")
+
+;; (ekp-font-family
+;;  "hello")
