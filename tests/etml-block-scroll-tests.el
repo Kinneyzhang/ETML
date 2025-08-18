@@ -1,16 +1,14 @@
 (require 'etml-test)
 (require 'etml-block)
 
-(defvar etml-test-scroll-block nil)
-
 (defvar etml-test-scroll-str1
-  (string-trim-right (file-content "./text-zh.txt") "\n"))
+  (string-trim-right (org-file-contents "./text-zh.txt") "\n"))
 
 (defvar etml-test-scroll-str2
-  (string-trim-right (file-content "./text-zh-en_US.txt") "\n"))
+  (string-trim-right (org-file-contents "./text-zh-en_US.txt") "\n"))
 
 (defvar etml-test-scroll-str3
-  (string-trim-right (file-content "./text-en_US.txt") "\n"))
+  (string-trim-right (org-file-contents "./text-en_US.txt") "\n"))
 
 (defmacro etml-block-scroll-render (buffer &rest body)
   (declare (indent defun))
