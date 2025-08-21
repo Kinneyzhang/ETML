@@ -9,7 +9,6 @@
 ;;   '((t :font "Noto Serif" :height 120))
 ;;   "")
 
-;;; FIXME: ekp 纯英文识别字体有问题，必须要加英文才能正确识别出字体！！！
 (defvar etml-test-scroll-str1
   (propertize
    (string-trim-right (org-file-contents "./text-zh.txt") "\n")
@@ -26,17 +25,6 @@
    'face 'etml-mono-face))
 
 ;; (ekp-clear-caches)
-
-;; (defvar etml-test-scroll-str1
-;;   (string-trim-right (org-file-contents "./text-zh.txt") "\n"))
-
-;; (defvar etml-test-scroll-str2
-;;   (string-trim-right (org-file-contents "./text-zh-en_US.txt") "\n"))
-
-;; (defvar etml-test-scroll-str3
-;;   (propertize
-;;    (string-trim-right (org-file-contents "./text-en_US.txt") "\n")q
-;;    'face 'etml-eng-face))
 
 (defmacro etml-block-scroll-render (buffer &rest body)
   (declare (indent defun))
@@ -104,9 +92,3 @@
   (goto-char (point-min)))
 
 (provide 'etml-block-scroll-tests)
-
-;; (ekp-font-family
-;;  "你好")
-
-;; (ekp-font-family
-;;  "hello")
