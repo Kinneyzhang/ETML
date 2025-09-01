@@ -58,6 +58,8 @@
  column-reverse")
    (wrap :initarg :wrap :initform 'nowrap :type symbol
          :documentation "换行方式: nowrap, wrap, wrap-reverse")
+   (flow :initarg :flow :type listp
+         :documentation "direction 和 wrap 的结合")
    (content-justify
     :initarg :content-justify :initform 'flex-start :type symbol
     :documentation "主轴对齐: flex-start, flex-end, center,\
@@ -66,10 +68,6 @@
     :initarg :content-align :initform 'stretch :type symbol
     :documentation "多行对齐: stretch, flex-start, flex-end,\
  center, space-between, space-around")
-   ;; (items-align
-   ;;    :initarg :items-align :initform 'stretch :type symbol
-   ;;    :documentation "交叉轴对齐: flex-start, flex-end, center,\
-   ;; baseline, stretch")
    (items :initarg :items :type (vector etml-block)
           :documentation "包含的子项目列表")
    ;; 使用 下面的选项为将每个 item 设置。单个值，表示应用到所有 items 上；
@@ -82,7 +80,7 @@
                :documentation "合并 flex-grow, flex-shrink,\
  flex-basis。flex: [grow] [shrink] [basis]. 'auto means (1 1 auto),
  'none means (0 0 auto).")
-   ;; (item-grow :initarg :item-grow :initform 0
+   ;;   (item-grow :initarg :item-grow :initform 0
    ;;              :type (satisfies etml-flex-number-vector-p)
    ;;              :documentation "定义项目在​​容器有剩余空间时​​的​​放大比例​​。\
    ;; 非负数字，默认值为 0（不放大）。")
@@ -98,7 +96,7 @@
                 :type (satisfies etml-flex-items-align-p)
                 :documentation "覆盖容器的 align-items属性，控制单个\
  项目的​​垂直。对齐方式支持: auto / flex-start / flex-end / center /\
- baseline,stretch."))
+ baseline / stretch."))
   "ETML flex layout model.")
 
 (defun etml-flex-render (flex)
