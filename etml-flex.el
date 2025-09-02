@@ -50,53 +50,38 @@
 
 ;;; type check functions ends.
 
+(defclass etml-flex-item (etml-block)
+  ((self :initarg :self :type etml-block
+         :documentation "item 本身。")
+   (order :initarg :order :initform 0 :type integer
+          :documentation "item 在 flex 容器中顺序。")
+   (basis :initarg :basis :initform 'auto :type symbol
+          :documentation "item 在​​分配空间前​​的​​初始尺寸。")
+   (grow :initarg :grow :initform 0 :type integer
+         :documentation "item 在​​容器有剩余空间时​​的​​增长系数​​。")
+   (shrink :initarg :shrink :initform 1 :type integer
+           :documentation "item 在​​容器空间不足时​​的​​缩小系数。")
+   (align :initarg :align :initform 'auto :type symbol
+          :documentation "item 在交叉轴的对齐方式，覆盖容器的 items-align 属性。")))
+
 (defclass etml-flex (etml-block)
   ((display :initarg :display :initform 'flex :type symbol
-            :documentation "Display type: flex or inline-flex")
+            :documentation "容器是块级元素还是内联元素。")
    (direction :initarg :direction :initform 'row :type symbol
-              :documentation "主轴方向: row, row-reverse, column,\
- column-reverse")
+              :documentation "主轴方向。")
    (wrap :initarg :wrap :initform 'nowrap :type symbol
-         :documentation "换行方式: nowrap, wrap, wrap-reverse")
-   (flow :initarg :flow :type listp
-         :documentation "direction 和 wrap 的结合")
+         :documentation "换行方式。")
    (content-justify
     :initarg :content-justify :initform 'flex-start :type symbol
-    :documentation "主轴对齐: flex-start, flex-end, center,\
- space-between, space-around, space-evenly")
+    :documentation "主轴对齐方式。")
    (content-align
     :initarg :content-align :initform 'stretch :type symbol
-    :documentation "多行对齐: stretch, flex-start, flex-end,\
- center, space-between, space-around")
-   (items :initarg :items :type (vector etml-block)
-          :documentation "包含的子项目列表")
-   ;; 使用 下面的选项为将每个 item 设置。单个值，表示应用到所有 items 上；
-   ;; 列表表示分别应用应用到每个 items
-   (items-order :initarg :items-order :initform nil
-                :type (or null (vector integer))
-                :documentation "nil means use the default order.")
-   (items-flex :initarg :items-flex :initform 'none
-               :type (satisfies etml-flex-items-flex-p)
-               :documentation "合并 flex-grow, flex-shrink,\
- flex-basis。flex: [grow] [shrink] [basis]. 'auto means (1 1 auto),
- 'none means (0 0 auto).")
-   ;;   (item-grow :initarg :item-grow :initform 0
-   ;;              :type (satisfies etml-flex-number-vector-p)
-   ;;              :documentation "定义项目在​​容器有剩余空间时​​的​​放大比例​​。\
-   ;; 非负数字，默认值为 0（不放大）。")
-   ;;   (item-shrink :initarg :item-shrink :initform 1
-   ;;                :type (satisfies etml-flex-number-vector-p)
-   ;;                :documentation "定义项目在​​容器空间不足时​​的​​缩小比例。\
-   ;; 非负数字，默认值为 1（允许缩小）。")
-   ;;   (item-basis :initarg :item-basis :initform 'auto
-   ;;               :type (satisfies etml-flex-number-auto-vector-p)
-   ;;               :documentation "定义项目在​​分配空间前​​的​​初始尺寸。\
-   ;; auto（默认，项目内容大小）或具体值（px, %, em等）。")
-   (items-align :initarg :items-align :initform 'auto
-                :type (satisfies etml-flex-items-align-p)
-                :documentation "覆盖容器的 align-items属性，控制单个\
- 项目的​​垂直。对齐方式支持: auto / flex-start / flex-end / center /\
- baseline / stretch."))
+    :documentation "多个主轴在垂直方向的对齐方式。")
+   (items :initarg :items :type (vector etml-flex-item)
+          :documentation "子项目列表")
+   (items-align
+    :initarg :items-align :initform 'stretch :type symbol
+    :documentation "所有 items 在交叉轴的对齐方式。"))
   "ETML flex layout model.")
 
 (defun etml-flex-render (flex)
