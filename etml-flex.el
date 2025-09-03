@@ -77,12 +77,38 @@
    (content-align
     :initarg :content-align :initform 'stretch :type symbol
     :documentation "多个主轴在垂直方向的对齐方式。")
-   (items :initarg :items :type (vector etml-flex-item)
+   (items :initarg :items :type (list etml-flex-item)
           :documentation "子项目列表")
    (items-align
     :initarg :items-align :initform 'stretch :type symbol
     :documentation "所有 items 在交叉轴的对齐方式。"))
   "ETML flex layout model.")
+
+(defun etml-flex-parse-basis (item)
+  "Parse basis of ITEM to pixel width."
+  (let* ((basis (oref item basis))
+         (block (oref item self))
+         (content (oref block content))
+         curr-content-pixel
+         min-content-pixel
+         max-content-pixel)
+    (cond
+     ((numberp basis) basis)
+     ((eq 'auto basis)
+      (setq curr-content-pixel
+            (etml-block-total-pixel item)))
+     ((or (eq 'content basis)
+          (eq 'max-content basis))
+      (setq max-content-pixel
+            (string-pixel-width content)))
+     ;; FIXME: if word with hyphenate
+     ((eq 'min-content basis)
+      (setq min-content-pixel
+            (+ (etml-block-side-pixel item)
+               (seq-min (ekp-boxes-widths content)))))
+     ((eq 'fit-content basis)
+      (min max-content-pixel
+           (max min-content-pixel curr-content-pixel))))))
 
 (defun etml-flex-render (flex)
   (let* ((display (oref flex display))
@@ -90,14 +116,18 @@
          (wrap (oref flex wrap))
          (content-justify (oref flex content-justify))
          (content-align (oref flex content-align))
-         ;; FIXME:已有 item-flex 则不再使用
-         ;; item-grow, item-shrink, item-basis
-         ;; (item-grow (oref flex item-grow))
-         ;; (item-shrink (oref flex item-shrink))
-         ;; (item-basis (oref flex item-basis))
-         ;; items are etml-block objects
+         (items-align (oref flex items-align))
+         (items (oref flex items))
+         (items-data-lst
+          (mapcar (lambda (item)
+                    (list :pixel (etml-flex-parse-basis item)
+                          :order (oref item order)
+                          :grow (oref item grow)
+                          :shrink (oref item shrink)
+                          :align (oref item align)))
+                  items))
          (blocks (oref flex items))
-         (num (length blocks))
+         (num (length items-data-lst))
          (items-order (oref flex items-align))
          ;; 单个值转换为每个block的值
          (items-align (let ((aligns (oref flex items-align)))
