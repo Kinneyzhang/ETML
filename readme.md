@@ -14,4 +14,4 @@ In light theme:
 
 Block text scroll:
 
-![block-text-scroll](https://emacs-china.org/uploads/default/original/3X/8/8/8868980c00303eecd534e01418fc66563f0d99c5.gif)
+https://emacs-china.org/uploads/default/original/3X/8/8/8868980c00303eecd534e01418fc66563f0d99c5.gif
