@@ -118,7 +118,7 @@
          (content-align (oref flex content-align))
          (items-align (oref flex items-align))
          (items (oref flex items))
-         (items-data-lst
+         (items-plist
           (mapcar (lambda (item)
                     (list :pixel (etml-flex-parse-basis item)
                           :order (oref item order)
