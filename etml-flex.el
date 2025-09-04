@@ -62,8 +62,15 @@
          :documentation "item 在​​容器有剩余空间时​​的​​增长系数​​。")
    (shrink :initarg :shrink :initform 1 :type integer
            :documentation "item 在​​容器空间不足时​​的​​缩小系数。")
-   (align :initarg :align :initform 'auto :type symbol
-          :documentation "item 在交叉轴的对齐方式，覆盖容器的 items-align 属性。")))
+   ;; 避免与 etml-block 的 align 属性冲突
+   (cross-align
+    :initarg :cross-align :initform 'auto :type symbol
+    :documentation "item 在交叉轴的对齐方式，覆盖容器的 items-align 属性。")))
+
+;; horizontal unit is pixel.
+;; vertical unit is line number.
+;; main-axis main-start main-end main-units
+;; cross-axis cross-start cross-end cross-units
 
 (defclass etml-flex (etml-block)
   ((display :initarg :display :initform 'flex :type symbol
@@ -85,14 +92,21 @@
     :documentation "所有 items 在交叉轴的对齐方式。"))
   "ETML flex layout model.")
 
-(defun etml-flex-parse-basis (item)
-  "Parse basis of ITEM to pixel width."
-  (let* ((basis (oref item basis))
+(defun etml-flex-parse-basis (item flex)
+  "Parse basis of ITEM to units."
+  (let* ((direction (oref flex direction))
+         (basis (oref item basis))
          (block (oref item self))
          (content (oref block content))
          curr-content-pixel
          min-content-pixel
          max-content-pixel)
+    ;; FIXME: 考虑不同轴线的情况
+    ;; (pcase direction
+    ;;   ((or 'row 'row-reverse)
+    ;;    )
+    ;;   ((or 'column 'column-reverse)
+    ;;    ))
     (cond
      ((numberp basis) basis)
      ((eq 'auto basis)
@@ -111,6 +125,50 @@
       (min max-content-pixel
            (max min-content-pixel curr-content-pixel))))))
 
+(defun etml-flex--cross-edge-units (item flex)
+  "根据 align，计算需要在 item 交叉轴开头和结尾增加的单元数。"
+  (let* ((align (oref item cross-align))
+         (align
+          (if (or (null align) (eq 'auto align))
+              (or (oref flex items-align) 'stretch)
+            align))
+         (direction (oref flex direction))
+         ;; 交叉轴方向的总单位数
+         (total-cross-units
+          (pcase direction
+            ((or 'row 'row-reverse)
+             ;; flex height or max height in items
+             (or (oref flex height)
+                 (seq-max (mapcar #'etml-block-total-height
+                                  (oref flex items)))))
+            ((or 'column 'column-reverse)
+             ;; flex width or max width in items
+             (or (oref flex width)
+                 (seq-max (mapcar #'etml-block-total-pixel
+                                  (oref flex items)))))))
+         (item-cross-units
+          (pcase direction
+            ((or 'row 'row-reverse)
+             (etml-block-total-height item))
+            ((or 'column 'column-reverse)
+             (etml-block-total-pixel item)))))
+    (pcase align
+      ((or 'stretch 'normal)
+       (let* ((rest-units (- total-cross-units item-cross-units))
+              (start-units (/ rest-units 2))
+              (end-units (- rest-units start-units)))
+         (cons start-units end-units)))
+      ('flex-start
+       (cons 0 (- total-cross-units item-cross-units)))
+      ('flex-end
+       (cons (- total-cross-units item-cross-units) 0))
+      ;; ('baseline
+      ;;  ;; FIXME:
+      ;;  ;; 项目的第一行文本基线与容器中所有其他项目的基线对齐。
+      ;;  ;; 若项目无文本，则以其底部边缘为基线。
+      ;;  )
+      )))
+
 ;; basis 决定 items 的基础宽度
 ;; grow or shrink
 
@@ -128,50 +186,14 @@
                           :order (oref item order)
                           :grow (oref item grow)
                           :shrink (oref item shrink)
-                          :align (oref item align)))
+                          :align (oref item cross-align)))
                   items))
-         (blocks (oref flex items))
-         (num (length items-data-lst))
-         (items-order (oref flex items-align))
-         ;; 单个值转换为每个block的值
-         (items-align (let ((aligns (oref flex items-align)))
-                        (if (vectorp aligns)
-                            aligns
-                          (make-vector num aligns))))
-         (items-flex
-          (let ((flexs (oref flex items-flex)))
-            (cond
-             ((symbolp flexs)
-              (pcase flexs
-                ('none '(0 0 auto))
-                ('auto '(1 1 auto))
-                (_ (error "Invalid format of items-flex!"))))
-             ((vectorp flexs) flexs)
-             ((consp flexs) (make-vector num flexs)))))
-         (blocks-widths
-          ;; if flex-basis is number or cons-cell
-          ;; use it to override block total width
-          (seq-map-indexed
-           (lambda (item-flex idx)
-             (let ((basis (nth 2 item-flex))
-                   (block (aref blocks idx)))
-               (cond
-                ((eq 'auto basis)
-                 ;; 保持原始宽度
-                 (etml-block-total-pixel block))
-                ((integerp basis)
-                 ;; 指定个数的字符宽度
-                 (oset block width basis)
-                 (etml-block-total-pixel block))
-                ((consp basis)
-                 ;; 指定像素宽度
-                 (oset block width (list basis))
-                 basis))))
-           items-flex))
-         (blocks-width (apply #'+ blocks-widths))
-         ;; FIXME: support both nchar and pixel width
-         ;; convert to pixel width
-         (flex-width (oref flex width)))
+         
+         (items-total-units
+          
+          ))
+    ;; (etml-flex--cross-edge-units item flex)
+    
     ;; If flex block has width:
     ;;   consider grow or shrink width of blocks
     ;; If flex block hasn't width:
