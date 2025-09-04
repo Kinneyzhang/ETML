@@ -1,6 +1,7 @@
 ;; -*- lexical-binding: t -*-
 
 (require 'eieio)
+(require 'ekp)
 (require 'etml-block)
 
 ;;; type check functions
@@ -109,6 +110,9 @@
      ((eq 'fit-content basis)
       (min max-content-pixel
            (max min-content-pixel curr-content-pixel))))))
+
+;; basis 决定 items 的基础宽度
+;; grow or shrink
 
 (defun etml-flex-render (flex)
   (let* ((display (oref flex display))
