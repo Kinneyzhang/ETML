@@ -406,12 +406,20 @@ to a symbol 'right, count the right side only."
   "文本设置了宽度之后的原始高度。"
   (etml-string-linum (etml-block-content block)))
 
-(defun etml-block-total-height (block)
-  (+ (etml-block-content-height block)
-     (etml-block-padding block 'top)
+(defun etml-block-side-height (block)
+  (+ (etml-block-padding block 'top)
      (etml-block-padding block 'bottom)
      (etml-block-margin block 'top)
      (etml-block-margin block 'bottom)))
+
+(defun etml-block-total-height (block)
+  (+ (etml-block-side-height block)
+     (max (or (oref block min-height) 1)
+          (let ((height (or (oref block height)
+                            (etml-block-content-height block))))
+            (if-let ((max-height (oref block max-height)))
+                (min max-height height)
+              height)))))
 
 (defun etml-block-border
     (block n-pixel height &optional border-color

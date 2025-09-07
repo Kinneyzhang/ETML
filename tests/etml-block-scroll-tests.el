@@ -52,14 +52,14 @@
       (etml-block :content etml-test-scroll-str2
                   :height 12 :width '(240)
                   :border t
-                  :bgcolor '("#FFF9F0" . "#222222")
+                  ;; :bgcolor '("#FFF9F0" . "#222222")
                   :margin '(1 . 1) :padding '(1 . 1)
                   :scroll-bar-direction 'left
                   :scroll-bar-gap 4)
       (etml-block :content etml-test-scroll-str2
                   :height 24 :width '(240)
                   :border t
-                  :bgcolor '("#FFF9F0" . "#222222")
+                  ;; :bgcolor '("#FFF9F0" . "#222222")
                   :margin '(1 . 0) :padding '(1 . 1)
                   :scroll-bar-direction 'right
                   :scroll-bar-full t
@@ -67,7 +67,7 @@
      (etml-block :content etml-test-scroll-str1
                  :height 39 :width '(350)
                  :border t
-                 :bgcolor '("#FFF9F0" . "#222222")
+                 ;; :bgcolor '("#FFF9F0" . "#222222")
                  :margin '(1 . 1) :padding '(1 . 1)
                  :scroll-bar-full t
                  :scroll-bar-pixel 2

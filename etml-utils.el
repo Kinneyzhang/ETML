@@ -2,6 +2,11 @@
 
 (require 'etml-pixel)
 
+(defun etml-plists-get (plist-seq prop)
+  (mapcar (lambda (plst)
+            (plist-get plst prop))
+          plist-seq))
+
 (defun etml-background-type ()
   (frame-parameter nil 'background-mode))
 
