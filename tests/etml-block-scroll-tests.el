@@ -32,6 +32,7 @@
      (delete-other-windows)
      (switch-to-buffer buffer)
      (with-current-buffer buffer
+       (toggle-truncate-lines 1)
        (kill-all-local-variables)
        (etml-block-caches-init)
        (let ((inhibit-read-only t))
