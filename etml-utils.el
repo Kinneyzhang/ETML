@@ -2,6 +2,21 @@
 
 (require 'etml-pixel)
 
+(defun etml-split-size (size n &optional extra start end)
+  "将 SIZE 分为 N 等份，并且在 start 到 end 位置加上额外的数字 extra"
+  (let ((each-size (/ size n))
+        (rest-num (% size n)))
+    (seq-map-indexed (lambda (size idx)
+                       (let ((s (if (< idx rest-num)
+                                    (1+ size)
+                                  size))
+                             (start (or start 0))
+                             (end (or end n)))
+                         (if (and extra (<= start idx) (> end idx))
+                             (+ extra s)
+                           s)))
+                     (make-list n each-size))))
+
 (defun etml-plists-get (plist-seq prop)
   (mapcar (lambda (plst)
             (plist-get plst prop))
@@ -124,18 +139,65 @@
                     'display `(space :width (,n-pixel)))))
       (etml-string-duplines string height))))
 
-(defun etml--num-in-prefixs (num lst)
-  "Find the position of the smallest number in LST
+(defun etml--num-in-prefixs (num prefixs)
+  "Find the position of the smallest number in PREFIXS
  that is greater than NUM. Position counts from 1.
-If NUM is greater than all elements, return (1+ (length LST))."
+If NUM is greater than all elements, return (1+ (length PREFIXS))."
   (cond
    ((= num 0) 0)
-   ((> num (car (last lst))) (length lst))
+   ((> num (car (last prefixs))) (length prefixs))
    (t (let ((pos 1))
-        (while (and lst (< (car lst) num))
-          (setq lst (cdr lst))
+        (while (and prefixs (< (car prefixs) num))
+          (setq prefixs (cdr prefixs))
           (setq pos (1+ pos)))
         pos))))
+
+(defun etml--num-in-lst (num lst)
+  "计算 NUM 落在 LST 中的第几个元素的前缀和区间内。"
+  (let* ((prefix 0)
+         ;; 计算前缀和
+         (prefixs (mapcar (lambda (n)
+                            (setq prefix (+ prefix n)))
+                          lst)))
+    (etml--num-in-prefixs num prefixs)))
+
+(defun etml-flex-line-breaks (flex-units items-units-lst)
+  "计算 FLEX 布局中每行的元素个数。
+FLEX-UNITS 是容器最大宽度，ITEMS-UNITS-LST 是项目宽度列表。
+返回每行元素个数的列表。"
+  (let ((current-sum 0)
+        (current-count 0)
+        (result '())
+        (index 0)
+        (len (length items-units-lst)))
+    (while (< index len)
+      (let ((current-width (nth index items-units-lst)))
+        ;; 如果当前项目本身已经超过或等于最大宽度，它必须单独成行
+        (if (>= current-width flex-units)
+            (progn
+              ;; 如果当前已经有累计的项目，先记录它们
+              (when (> current-count 0)
+                (setq result (cons current-count result))
+                (setq current-sum 0)
+                (setq current-count 0))
+              ;; 记录这个超大项目
+              (setq result (cons 1 result))
+              (setq index (1+ index)))
+          ;; 常规情况：尝试将当前项目添加到当前行
+          (if (<= (+ current-sum current-width) flex-units)
+              (progn
+                (setq current-sum (+ current-sum current-width))
+                (setq current-count (1+ current-count))
+                (setq index (1+ index)))
+            ;; 当前行已满，记录当前行的项目数
+            (setq result (cons current-count result))
+            (setq current-sum 0)
+            (setq current-count 0)))))
+    ;; 处理最后一行（如果有未记录的项目）
+    (when (> current-count 0)
+      (setq result (cons current-count result)))
+    ;; 返回反转后的结果（顺序与行的顺序一致）
+    (reverse result)))
 
 (defun etml-string-nchar-pixel (string n &optional from-end)
   "Return the pixel width of n char in STRING from start

@@ -85,12 +85,21 @@
    (content-align
     :initarg :content-align :initform 'stretch :type symbol
     :documentation "多个主轴在垂直方向的对齐方式。")
+   (row-gap :initarg :row-gap :initform 0
+            :type number :documentation "多行之间的 gap。")
+   (column-gap :initarg :column-gap :initform 0
+               :type number :documentation "多列之间的 gap。")
    (items :initarg :items :type (list etml-flex-item)
           :documentation "子项目列表")
    (items-align
     :initarg :items-align :initform 'stretch :type symbol
     :documentation "所有 items 在交叉轴的对齐方式。"))
   "ETML flex layout model.")
+
+;; (defun etml-item-total-units ()
+;;   "返回的 item 的总宽度。"
+
+;;   )
 
 (defun etml-flex-parse-basis (item flex)
   ;; 对于左右方向排列的文本，宽度会影响高度，但是高度不会影响宽度
@@ -105,7 +114,7 @@
     ;; basis 是 item 的初始长度，包含 margin, padding !
     (pcase direction
       ((or 'row 'row-reverse)
-       (cons (pcase basis
+       (list (pcase basis
                ;; FIXME: number 需在最小和最大长度范围内
                ((pred 'numberp) basis)
                ('auto
@@ -125,10 +134,9 @@
                            item-min-units))))
                ('fit-content
                 (min max-units (max min-units curr-units))))
-             ;; 最小宽度
-             min-units))
+             min-units max-units))
       ((or 'column 'column-reverse)
-       (cons (pcase basis
+       (list (pcase basis
                ;; FIXME: number 需在最小和最大长度范围内
                ((pred 'numberp) basis)
                ('auto
@@ -143,8 +151,7 @@
                 (setq min-units (etml-block-total-height item)))
                ('fit-content
                 (min max-units (max min-units curr-units))))
-             ;; 最小高度是1
-             1)))))
+             1 max-units)))))
 
 (defun etml-flex--cross-edge-units (item flex)
   "根据 align，计算需要在 item 交叉轴开头和结尾增加的单元数。"
@@ -193,146 +200,273 @@
 ;; basis 决定 items 的基础宽度
 ;; grow or shrink
 
+(defun etml-flex-items-grow (items-plists flex-units items-units
+                                          direction)
+  "按照 grow 拉伸并设置子项长度"
+  (let* ((items (etml-plists-get items-plists :item))
+         (rest-units (abs (- flex-units items-units)))
+         (grows (etml-plists-get items-plists :grow))
+         (grows-sum (apply '+ grows))
+         (average-grow (if (> grows-sum 0)
+                           (/ rest-units grows-sum)
+                         0))
+         (rest-num (if (> grows-sum 0)
+                       (% rest-units grows-sum)
+                     0))
+         (rest-idx 0))
+    ;; 设置 items 的主轴方向 grow 后的新的长度
+    (seq-map-indexed
+     (lambda (grow idx)
+       (let* ((base-units (nth idx items-units))
+              (item (nth idx items))
+              final-units)
+         (if (= grow 0)
+             ;; grow=0 不拉伸
+             (setq final-units base-units)
+           ;; grow>0 按比例拉伸
+           (setq final-units
+                 (+ base-units (* grow average-grow)
+                    (if (< rest-idx rest-num) 1 0)))
+           (cl-incf rest-idx 1))
+         ;; 按照方向设置 item 的新的主轴方向长度
+         (pcase direction
+           ;; 关键点:
+           ;; 1. basis units 是 item block 总长度
+           ;; 2. item block 的 width/height 属性是内容的长度
+           ((or 'row 'row-reverse)
+            (oset item width
+                  (- final-units (etml-block-side-pixel item))))
+           ((or 'column 'column-reverse)
+            (oset item height
+                  (- final-units (etml-block-side-height item)))))))
+     grows)))
+
+;; 当前最新的总宽度
+;; (etml-flex-items-total-units items)
+
+(defun etml-flex-items-shrink (items-plists flex-units items-units
+                                            direction)
+  "按照 shrink 缩减并设置子项长度"
+  (let* ((items (etml-plists-get items-plists :item))
+         ;; shrink 后不能小于 最小宽度 或 最小高度(1)
+         (rest-units (- flex-units items-units))
+         (min-units-lst (etml-plists-get items-plists :min-units))
+         (shrinks (etml-plists-get items-plists :shrink))
+         (shrinks-sum (apply '+ shrinks))
+         (average-shrink (if (> shrinks-sum 0)
+                             (/ rest-units shrinks-sum)
+                           0))
+         (rest-num (if (> shrinks-sum 0)
+                       (% rest-units shrinks-sum)
+                     0))
+         (rest-idx 0))
+    (seq-map-indexed
+     (lambda (shrink idx)
+       (let* ((base-units (nth idx items-units))
+              (item (nth idx items))
+              (min-units (nth idx min-units-lst))
+              final-units)
+         (if (= shrink 0)
+             ;; shrink=0 不缩减
+             (setq final-units base-units)
+           ;; shrink>0 按比例缩减，但不能小于最小长度
+           (setq final-units
+                 ;; FIXME: 当缩减后小于最小长度时，
+                 ;; 其余 items 重新分配这未能被缩减的长度
+                 (max min-units
+                      (- (- base-units (* shrink average-shrink))
+                         (if (< rest-idx rest-num) 1 0))))
+           (cl-incf rest-idx 1))
+         (pcase direction
+           ;; 关键点:
+           ;; 1. basis units 是 item block 总长度
+           ;; 2. item block 的 width/height 属性是内容的长度
+           ((or 'row 'row-reverse) 
+            (oset item width
+                  (- final-units
+                     (etml-block-side-pixel item))))
+           ((or 'column 'column-reverse)
+            (oset item height
+                  (- final-units
+                     (etml-block-side-height item)))))))
+     shrinks)))
+
+(defun etml-flex-items-adjust (items-plists flex)
+  "根据容器长度、items长度、shrink、grow 等动态调整子项长度。"
+  (let* ((flex-units (etml-flex-main-units flex))
+         (direction (oref flex direction))
+         (items-units (etml-flex-items-total-units flex)))
+    ;; 容器长度 >= 子项总长度: 拉伸
+    (if (>= flex-units items-units)
+        (etml-flex-items-grow
+         items-plists flex-units items-units direction)
+      ;; 容器长度 < 子项总长度: 缩减
+      (etml-flex-items-shrink
+       items-plists flex-units items-units direction))))
+
+(defun etml-flex-main-units (flex)
+  "Flex 容器的内容部分的主轴长度"
+  (pcase (oref flex direction)
+    ((or 'row 'row-reverse)
+     (or (etml-width-pixel (oref flex width))
+         (etml-width-pixel (oref flex max-width))))
+    ((or 'column 'column-reverse)
+     (or (oref flex height)
+         (oref flex max-height)))))
+
+(defun etml-flex-items-total-units (flex)
+  "获取当前左右子项最新的长度总和"
+  (apply #'+ (mapcar (lambda (item)
+                       (pcase direction
+                         ((or 'row 'row-reverse)
+                          (+ (etml-block-side-pixel item)
+                             (etml-width-pixel (oref item width))))
+                         ((or 'column 'column-reverse)
+                          (+ (etml-block-side-height item)
+                             (oref item height)))))
+                     (oref flex items))))
+
+(defun etml-flex-content-justify (items-num rest-units content-justify gap)
+  ;; rest-units 是不包含基础 gap 的
+  (pcase content-justify
+    ('flex-start (append (make-list items-num gap) (list rest-units)))
+    ('flex-end (append (list rest-units) (make-list items-num gap)))
+    ('center (append (list (/ rest-units 2))
+                     (make-list (1- items-num) gap)
+                     (list (+ (/ rest-units 2)
+                              (% rest-units 2)))))
+    ('space-between
+     (append (list 0)
+             (etml-split-size rest-units (1- items-num) gap)
+             (list 0)))
+    ('space-around
+     (let* ((around-units-lst
+             (etml-split-size rest-units (* 2 items-num)))
+            (start-units (seq-first around-units-lst))
+            (end-units (seq-drop around-units-lst (1- (* 2 items-num))))
+            (middle-units-lst (seq-subseq around-units-lst
+                                          1 (1- (* 2 items-num)))))
+       (append start-units
+               ;; 合并中间的每2个，并加上 gap
+               (mapcar (lambda (cons)
+                         (+ gap (car cons) (or (cdr cons) 0)))
+                       (seq-partition middle-units-lst 2))
+               end-units)))
+    ('space-evenly
+     (etml-split-size rest-units (1+ items-num) gap 1 items-num))))
+
 (defun etml-flex-render (flex)
   (let* ((display (oref flex display))
          (direction (oref flex direction))
          (content-justify (oref flex content-justify))
          (content-align (oref flex content-align))
          (items-align (oref flex items-align))
-         (items (oref flex items))
+         (items (items (oref flex items)))
+         ;; 根据 order 重新排列 items
+         (items (seq-sort (lambda (item1 item2)
+                            (< (oref item1 order)
+                               (oref item2 order)))
+                          items))
          (items-plists
           (mapcar (lambda (item)
-                    (let ((cons (etml-flex-parse-basis item flex)))
-                      (list :base-units (car cons)
-                            :min-units (cdr cons)
+                    (let ((lst (etml-flex-parse-basis item flex)))
+                      (list :item item
+                            :base-units (nth 0 lst)
+                            :min-units (nth 1 lst)
+                            :max-units (nth 2 lst)
                             :order (oref item order)
                             :grow (oref item grow)
                             :shrink (oref item shrink)
                             :align (oref item cross-align))))
                   items))
-         (items-units (etml-plists-get items-plists :base-units))
-         (items-total-units (apply '+ items-units)))
+         (items-units-lst (etml-plists-get items-plists :base-units))
+         ;; 当前使用 base-units 计算初始的总宽度
+         ;; 后续动态调整中更多的使用实时计算出来的 items 总宽度
+         (items-units (apply '+ items-units-lst))
+         ;; 用于记录每行的 items 的数量
+         (wrap-lst (list (length items-units-lst))))
     (if-let*
         ;; flex 容器设置了主轴方向的长度
-        ((flex-units (pcase direction
-                       ((or 'row 'row-reverse)
-                        (or (etml-width-pixel (oref flex width))
-                            (etml-width-pixel (oref flex max-width))))
-                       ((or 'column 'column-reverse)
-                        (or (oref flex height)
-                            (oref flex max-height)))))
-         (rest-units (- flex-units items-total-units)))
+        ((flex-units (etml-flex-main-units flex))
+         (rest-units (- flex-units items-units)))
         (if (>= rest-units 0)
             ;; 容器长度 >= items总长度，考虑 grow，不换行
-            (let* ((grows (etml-plists-get items-plists :grow))
-                   (grows-sum (apply '+ grows))
-                   (average-grow (if (> grows-sum 0)
-                                     (/ rest-units grows-sum)
-                                   0))
-                   (rest-num (if (> grows-sum 0)
-                                 (% rest-units grows-sum)
-                               0))
-                   (rest-idx 0))
-              ;; 设置 items 的主轴方向 grow 后的新的长度
-              (seq-map-indexed
-               (lambda (grow idx)
-                 (let* ((base-units (nth idx items-units))
-                        (item (nth idx items))
-                        final-units)
-                   (if (= grow 0)
-                       ;; grow=0 不拉伸
-                       (setq final-units base-units)
-                     ;; grow>0 按比例拉伸
-                     (setq final-units
-                           (+ base-units (* grow average-grow)
-                              (if (< rest-idx rest-num) 1 0)))
-                     (cl-incf rest-idx 1))
-                   ;; 按照方向设置 item 的新的主轴方向长度
-                   (pcase direction
-                     ;; 关键点:
-                     ;; 1. basis units 是 item block 总长度
-                     ;; 2. item block 的 width/height 属性是内容的长度
-                     ((or 'row 'row-reverse)
-                      (oset item width
-                            (- final-units (etml-block-side-pixel item))))
-                     ((or 'column 'column-reverse)
-                      (oset item height
-                            (- final-units (etml-block-side-height item)))))))
-               grows))
-          (let* ;; 容器长度 < items总长度，考虑 shrink 和 换行
-              ((rest-units (abs rest-units))
-               ;; shrink 后不能小于 最小宽度 或 最小高度(1)
-               (min-units-lst (etml-plists-get items-plists :min-units))
-               (shrinks (etml-plists-get items-plists :shrink))
-               (shrinks-sum (apply '+ shrinks))
-               (average-shrink (if (> shrinks-sum 0)
-                                   (/ rest-units shrinks-sum)
-                                 0))
-               (rest-num (if (> shrinks-sum 0)
-                             (% rest-units shrinks-sum)
-                           0))
-               (rest-idx 0))
-            (if (eq 'nowarp (oref flex wrap))
-                ;; 显式设置 'nowarp 则不换行, shrink，但不小于最小长度
-                ;; shrink 后超过容器宽度时，在水平方向溢出
-                (seq-map-indexed
-                 (lambda (shrink idx)
-                   (let* ((base-units (nth idx items-units))
-                          (item (nth idx items))
-                          (min-units (nth idx min-units-lst))
-                          final-units)
-                     (if (= shrink 0)
-                         ;; shrink=0 不缩减
-                         (setq final-units base-units)
-                       ;; shrink>0 按比例缩减，但不能小于最小长度
-                       (setq final-units
-                             (max min-units
-                                  (- (- base-units (* shrink average-shrink))
-                                     (if (< rest-idx rest-num) 1 0))))
-                       (cl-incf rest-idx 1))
-                     (pcase direction
-                       ;; 关键点:
-                       ;; 1. basis units 是 item block 总长度
-                       ;; 2. item block 的 width/height 属性是内容的长度
-                       ((or 'row 'row-reverse) 
-                        (oset item width
-                              (- final-units
-                                 (etml-block-side-pixel item))))
-                       ((or 'column 'column-reverse)
-                        (oset item height
-                              (- final-units
-                                 (etml-block-side-height item)))))))
-                 shrinks)
-              ;; shrink 之后然后超过容器长度的，换行后重新计算
-              ;; 考虑 direction，确定从什么位置的item开始换行
-              (let (()))
-              )
-            )
-          )
+            (etml-flex-items-grow
+             items-plists flex-units items-units direction)
+          ;; 容器长度 < items总长度，考虑 shrink 和 换行
+          (etml-flex-items-shrink
+           items-plists flex-units items-units direction)
+          (let* ((items-units (etml-flex-items-total-units items)))
+            (unless (and (eq 'nowarp (oref flex wrap))
+                         (<= items-units flex-units))
+              ;; 缩减之后仍然超过容器长度的，且非 nowrap，
+              ;; 计算换行点
+              (setq wrap-lst (etml-flex-line-breaks
+                              flex-units items-units-lst))
+              (let ((prev 0))
+                (dolist (num wrap-lst)
+                  ;; 当前主轴方向的新的 items
+                  (let ((sub-items-plists
+                         (seq-subseq items-plists
+                                     prev (+ prev num))))
+                    ;; 重新计算每行的 item 长度
+                    (etml-flex-items-adjust sub-items-plists flex)
+                    (setq prev (+ prev num))))))))
       ;; flex 容器未设置主轴方向的长度，items 不换行
       ;; grow=0 不拉伸；grow>0 拉伸值最大宽度 (min max-width max-content)
-      (let ((grows (etml-plists-get items-plists :grow)))
+      (let ((grows (etml-plists-get items-plists :grow))
+            final-units)
         (seq-map-indexed
          (lambda (grow idx)
-           (let ((item (nth idx items)))
+           (let ((item (nth idx items))
+                 (items-plist (nth idx items-plists)))
              (if (= grow 0)
-                 
-                 )
+                 ;; 不拉伸，设置为 base-units
+                 (setq final-units (plist-get items-plist :base-units))
+               ;; 拉伸到 (min max-width max-content)
+               (setq final-units (plist-get items-plist :max-units)))
              (pcase direction
                ((or 'row 'row-reverse)
-                (oset item width units))
+                (oset item width
+                      (- final-units
+                         (etml-block-side-pixel item))))
                ((or 'column 'column-reverse)
-                (oset item height units)))))
-         grows)
-        ))
+                (oset item height
+                      (- final-units
+                         (etml-block-side-height item)))))))
+         grows)))
+    ;; FIXME: 还未考虑 row-gap, column-gap
+    (let ((prev 0) justify-gaps align-gaps)
+      (dolist (num wrap-lst)
+        ;; 当前主轴方向的新的 items
+        (let* ((sub-items-plists
+                (seq-subseq items-plists
+                            prev (+ prev num)))
+               (items-num (length sub-items-plists))
+               (flex-units (etml-flex-main-units flex))
+               (items-units (etml-flex-items-total-units flex)))
+          (if (> flex-units items-units)
+              ;; 每个主轴方向有剩余空间时，考虑 content-justify
+              (push (etml-flex-content-justify
+                     items-num
+                     (- flex-units items-units)
+                     content-justify 0) ;; FIXME: 考虑 gap
+                    justify-gaps)
+            ;; FIXME: shoud add gap
+            (make-list (1+ items-num) 0))
+          (setq prev (+ prev num)))))
+
+    ;; consider content-align
     
+    ;; consider cross-align: 
     ;; (etml-flex--cross-edge-units item flex)
+    ;; 非 scretch 时，连接的后的 items 的高度可能不一致
+    ;; 但是 block-concat 默认会使用空白像素行填充
+    ;; 此时换行的 item 排列需要使用 block-cut 嵌入到短的 items 里
+    ;; (记录每个 item 的宽和高，用于瀑布流的排列！)
+    ;; 如果宽度允许嵌入的话
     
+    ;; 最后连接 items block 时，考虑 direction, wrap 的方向
     ))
 
-
-;; (etml-flex :items-flex [(0 1 auto) (0 2 auto)]
-;;            :items-shrink [1 2 3]
-;;            :items-basis [auto 1 2]
-;;            :items-align [baseline auto]
-;;            )
+(provide 'etml-flex)
