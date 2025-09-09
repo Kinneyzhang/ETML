@@ -161,42 +161,55 @@ If NUM is greater than all elements, return (1+ (length PREFIXS))."
                           lst)))
     (etml--num-in-prefixs num prefixs)))
 
-(defun etml-flex-line-breaks (flex-units items-units-lst)
-  "计算 FLEX 布局中每行的元素个数。
-FLEX-UNITS 是容器最大宽度，ITEMS-UNITS-LST 是项目宽度列表。
-返回每行元素个数的列表。"
-  (let ((current-sum 0)
-        (current-count 0)
-        (result '())
-        (index 0)
+(defun etml-flex-line-breaks (flex-units items-units-lst gap)
+  "计算 FLEX 布局中每行的元素个数，考虑项目之间的固定间隙。
+FLEX-UNITS 是容器最大宽度，ITEMS-UNITS-LST 是项目宽度列表，
+GAP 是项目之间的固定间隙（单位与项目宽度相同）。
+返回每行元素个数的列表（按行顺序排列）。"
+  (let ((current-sum 0)       ; 当前行累计宽度
+        (current-count 0)     ; 当前行项目计数
+        (result '())           ; 结果列表（逆序存储）
+        (index 0)              ; 当前处理的项目索引
         (len (length items-units-lst)))
     (while (< index len)
       (let ((current-width (nth index items-units-lst)))
-        ;; 如果当前项目本身已经超过或等于最大宽度，它必须单独成行
+        ;; 处理超大项目（宽度 >= 容器宽度）
         (if (>= current-width flex-units)
             (progn
-              ;; 如果当前已经有累计的项目，先记录它们
+              ;; 结束当前行（如果有项目）
               (when (> current-count 0)
-                (setq result (cons current-count result))
-                (setq current-sum 0)
-                (setq current-count 0))
-              ;; 记录这个超大项目
-              (setq result (cons 1 result))
-              (setq index (1+ index)))
-          ;; 常规情况：尝试将当前项目添加到当前行
-          (if (<= (+ current-sum current-width) flex-units)
-              (progn
-                (setq current-sum (+ current-sum current-width))
-                (setq current-count (1+ current-count))
-                (setq index (1+ index)))
-            ;; 当前行已满，记录当前行的项目数
-            (setq result (cons current-count result))
-            (setq current-sum 0)
-            (setq current-count 0)))))
+                (push current-count result)
+                (setq current-sum 0
+                      current-count 0))
+              ;; 超大项目单独成行
+              (push 1 result)
+              (cl-incf index))  ; 移动到下一个项目
+          ;; 常规项目处理
+          (let ((required-width
+                 (if (> current-count 0)
+                     (+ current-sum gap current-width) ; 非首项需加间隙
+                   current-width))) ; 首项不加间隙
+            ;; 检查是否能加入当前行
+            (if (<= required-width flex-units)
+                (progn
+                  (setq current-sum required-width)
+                  (cl-incf current-count)
+                  (cl-incf index))  ; 移动到下一个项目
+              ;; 无法加入当前行（除非是空行）
+              (if (> current-count 0)
+                  (progn
+                    ;; 结束当前行（非空行）
+                    (push current-count result)
+                    (setq current-sum 0
+                          current-count 0))
+                ;; 空行特殊情况：即使单独项目也应能容纳（理论上不会触发）
+                (setq current-sum current-width
+                      current-count 1
+                      index (1+ index))))))))
     ;; 处理最后一行（如果有未记录的项目）
     (when (> current-count 0)
-      (setq result (cons current-count result)))
-    ;; 返回反转后的结果（顺序与行的顺序一致）
+      (push current-count result))
+    ;; 返回正确顺序的结果（反转结果列表）
     (reverse result)))
 
 (defun etml-string-nchar-pixel (string n &optional from-end)
