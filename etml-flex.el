@@ -96,11 +96,6 @@
     :documentation "所有 items 在交叉轴的对齐方式。"))
   "ETML flex layout model.")
 
-;; (defun etml-item-total-units ()
-;;   "返回的 item 的总宽度。"
-
-;;   )
-
 (defun etml-flex-parse-basis (item flex)
   ;; 对于左右方向排列的文本，宽度会影响高度，但是高度不会影响宽度
   ;; min(max)-width 优先级比 min(max)-content 高
@@ -243,7 +238,7 @@
      grows)))
 
 ;; 当前最新的总宽度
-;; (etml-flex-items-total-units items)
+;; (etml-flex-items-main-units items)
 
 (defun etml-flex-items-shrink (items-plists
                                flex-units items-units gaps-units
@@ -302,6 +297,15 @@
       ((or 'row 'row-reverse) column-gap)
       ((or 'column 'column-reverse) row-gap))))
 
+(defun etml-flex-cross-gap-units (flex)
+  "返回交叉轴方向的 gap 长度"
+  (let ((direction (oref flex direction))
+        (column-gap (oref flex column-gap))
+        (row-gap (oref flex row-gap)))
+    (pcase direction
+      ((or 'row 'row-reverse) row-gap)
+      ((or 'column 'column-reverse) column-gap))))
+
 (defun etml-flex-main-gaps-units (items-plists flex)
   "主轴方向的 gaps 的长度和，用于计算 grow 和 shrink"
   (let ((direction (oref flex direction))
@@ -317,7 +321,7 @@
   "根据容器长度、items长度、shrink、grow 等动态调整子项长度。"
   (let* ((flex-units (etml-flex-main-units flex))
          (direction (oref flex direction))
-         (items-units (etml-flex-items-total-units flex))
+         (items-units (etml-flex-items-main-units flex))
          (gaps-units (etml-flex-main-gaps-units items-plists flex)))
     ;; 容器长度 >= 子项总长度: 拉伸
     (if (>= flex-units items-units)
@@ -327,17 +331,28 @@
       (etml-flex-items-shrink
        items-plists flex-units items-units gaps-units direction))))
 
+;; FIXME: need consider max?
 (defun etml-flex-main-units (flex)
   "Flex 容器的内容部分的主轴长度"
   (pcase (oref flex direction)
     ((or 'row 'row-reverse)
      (or (etml-width-pixel (oref flex width))
-         (etml-width-pixel (oref flex max-width))))
+         ;; (etml-width-pixel (oref flex max-width))
+         ))
     ((or 'column 'column-reverse)
      (or (oref flex height)
-         (oref flex max-height)))))
+         ;; (oref flex max-height)
+         ))))
 
-(defun etml-flex-items-total-units (flex)
+(defun etml-flex-cross-units (flex)
+  "Flex 容器的内容部分的交叉轴长度"
+  (pcase (oref flex direction)
+    ((or 'row 'row-reverse)
+     (oref flex height))
+    ((or 'column 'column-reverse)
+     (etml-width-pixel (oref flex width)))))
+
+(defun etml-flex-items-main-units (flex)
   "获取当前左右子项最新的长度总和"
   (apply #'+ (mapcar (lambda (item)
                        (pcase direction
@@ -349,9 +364,16 @@
                              (oref item height)))))
                      (oref flex items))))
 
+(defun etml-flex-items-cross-max-units (items flex)
+  "交叉轴方向的子项最大长度"
+  (pcase (oref flex direction)
+    ((or 'row 'row-reverse)
+     (seq-max (mapcar #'etml-block-total-height items)))
+    ((or 'column 'column-reverse)
+     (seq-max (mapcar #'etml-block-total-pixel items)))))
+
 (defun etml-flex-content-justify
     (items-num rest-units content-justify gap)
-  ;; rest-units 是不包含基础 gap 的
   (pcase content-justify
     ('flex-start (append (make-list items-num gap) (list rest-units)))
     ('flex-end (append (list rest-units) (make-list items-num gap)))
@@ -421,7 +443,7 @@
           ;; 容器长度 < items总长度，考虑 shrink 和 换行
           (etml-flex-items-shrink
            items-plists flex-units items-units gaps-units direction)
-          (let* ((items-units (etml-flex-items-total-units items)))
+          (let* ((items-units (etml-flex-items-main-units items)))
             (unless (and (eq 'nowarp (oref flex wrap))
                          (<= items-units flex-units))
               ;; 缩减之后仍然超过容器长度的，且非 nowrap，
@@ -461,27 +483,51 @@
                       (- final-units
                          (etml-block-side-height item)))))))
          grows)))
-    (let ((prev 0) justify-gaps align-gaps)
+    ;; 依次处理每一条主轴上的 content-justify
+    (let ((prev 0)
+          ;; content-justify 后的新的 gaps 列表
+          main-gaps-lst cross-max-units-lst)
       (dolist (num wrap-lst)
         ;; 当前主轴方向的新的 items
         (let* ((sub-items-plists
                 (seq-subseq items-plists
                             prev (+ prev num)))
+               (items (etml-plists-get sub-items-plists :item))
                (items-num (length sub-items-plists))
                (flex-units (etml-flex-main-units flex))
-               (items-units (etml-flex-items-total-units flex)))
-          (if (> flex-units items-units)
-              ;; 每个主轴方向有剩余空间时，考虑 content-justify
+               (items-units (etml-flex-items-main-units flex))
+               (gaps-units (etml-flex-main-gaps-units
+                            sub-items-plists flex))
+               (rest-units (- flex-units items-units gaps-units))
+               (gap-units (etml-flex-main-gap-units flex)))
+          ;; 交叉轴方向的子项最大长度，用于设置 content-align
+          (push (etml-flex-items-cross-max-units items flex)
+                cross-max-units-lst)
+          (if (> rest-units 0)
+              ;; 主轴方向有剩余空间时，才考虑 content-justify
               (push (etml-flex-content-justify
-                     items-num
-                     (- flex-units items-units)
-                     content-justify 0) ;; FIXME: 考虑 gap
-                    justify-gaps)
+                     items-num rest-units content-justify
+                     gap-units)
+                    main-gaps-lst)
             ;; FIXME: shoud add gap
-            (make-list (1+ items-num) 0))
-          (setq prev (+ prev num)))))
-    ;; consider content-align
-    
+            (push (make-list (1+ items-num) gap-units) main-gaps-lst))
+          (setq prev (+ prev num))))
+      (setq main-gaps-lst (nreverse main-gaps-lst))
+      (setq cross-max-units-lst (nreverse cross-max-units-lst)))
+    ;; wrap 不是 nowrap, 子项分布在多行(列),
+    ;; 且 容器在交叉轴方向必须有额外空间​，才考虑 content-align
+    (let ((cross-flex-units (etml-flex-cross-units flex))
+          (items-num (length wrap-lst))
+          (gap-units (etml-flex-cross-gap-units flex))
+          ;; items 和 gaps 在交叉轴的总长度
+          (cross-content-units (+ (apply '+ cross-max-units-lst)
+                                  (* gap-units items-num))))
+      (when (and (not (eq 'nowarp (oref flex wrap)))
+                 cross-flex-units (> items-num 1)
+                 (< cross-content-units cross-flex-units))
+        (let ((rest-units (cross-flex-units cross-content-units)))
+          ;; 复用 etml-flex-content-justify，增加 'scretch
+          )))
     
     ;; consider cross-align: 
     ;; (etml-flex--cross-edge-units item flex)
