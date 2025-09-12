@@ -588,7 +588,14 @@
       (setq cross-items-pads-lst (nreverse cross-items-pads-lst))
       (setq cross-gaps-lst (nreverse cross-gaps-lst)))
     ;; 最后连接 items block 时，考虑 direction, wrap 的方向
-    
+    ;; main-gaps-lst: 每个主轴方向的 items 的 gap
+    ;; cross-gaps-lst: 交叉轴方向的主轴之间的 gap
+    ;; cross-items-pads-lst: 每个主轴方向的 items 在交叉轴方向的 pads
+    (pcase direction
+      '(row )
+      '(row-reverse)
+      '(column)
+      '(column-reverse))
     ))
 
 (provide 'etml-flex)
